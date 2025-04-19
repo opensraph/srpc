@@ -1,14 +1,32 @@
-# srpc
-A lightweight RPC framework implementing the Connect RPC protocol with gRPC-compatible interfaces.
+# SRPC
 
+A lightweight RPC framework implementing the Connect RPC protocol with gRPC-compatible interfaces. SRPC seamlessly connects browsers and backend services using the same Protocol Buffer definitions.
+
+[![Go Reference](https://pkg.go.dev/badge/github.com/opensraph/srpc.svg)](https://pkg.go.dev/github.com/opensraph/srpc)
+[![Go Report Card](https://goreportcard.com/badge/github.com/opensraph/srpc)](https://goreportcard.com/report/github.com/opensraph/srpc)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+
+## Overview
+
+SRPC combines the best of both worlds - the simplicity and browser compatibility of Connect with the robust interface design of gRPC. It enables you to build services that can be consumed by both browser clients and gRPC native clients using a single API definition.
+
+**Why choose SRPC?**
+
+- **Unified API** - Use the same Protocol Buffer definitions for all clients
+- **Browser Support** - Serve web clients without complex proxies or translations
+- **gRPC Compatibility** - Familiar API for gRPC developers
+- **Framework Agnostic** - Works with any Go HTTP server implementation
 
 ## Features
 
-- **Protocol Compatibility**: Implements the Connect RPC protocol to support browser and gRPC-compatible HTTP APIs
-- **gRPC Compatible Interface**: Provides the same API experience as gRPC for seamless transitions
-- **Interface Compatibility**: Offers interfaces compatible with both standard library and gRPC code
-- **Lightweight Design**: Focuses on core functionality without unnecessary complexity
-- **Full Streaming Support**: Supports unary calls, server streaming, client streaming, and bidirectional streaming RPCs
+- **Protocol Compatibility** - Implements the Connect RPC protocol to support browser and gRPC-compatible HTTP APIs
+- **gRPC Compatible Interface** - Provides the same API experience as gRPC for seamless transitions
+- **Interface Compatibility** - Offers interfaces compatible with both standard library and gRPC code
+- **Lightweight Design** - Focuses on core functionality without unnecessary complexity
+- **Full Streaming Support** - Supports unary calls, server streaming, client streaming, and bidirectional streaming RPCs
+- **Interceptors & Middleware** - Flexible request/response processing pipeline
+- **Error Handling** - Structured error types compatible with both standard Go errors and gRPC status codes
+- **Transport Agnostic** - HTTP/1.1, HTTP/2, and HTTP/3 ready
 
 ## Quick Start
 
@@ -75,7 +93,7 @@ import (
     "errors"
     
     "github.com/opensraph/srpc"
-    elizav1 "path/to/generated/proto"
+    elizav1 "github.com/opensraph/srpc/examples/proto/gen/srpc/eliza/v1"
 )
 
 type elizaImpl struct {
@@ -146,7 +164,7 @@ import (
     "log"
     
     "github.com/opensraph/srpc"
-    elizav1 "path/to/generated/proto"
+    elizav1 "github.com/opensraph/srpc/examples/proto/gen/srpc/eliza/v1"
 )
 
 func main() {
@@ -184,14 +202,13 @@ func main() {
 }
 ```
 
-## Standard Library and gRPC Compatibility Design
+## Compatibility Design
 
 SRPC carefully designs interfaces compatible with both Go standard library and gRPC:
 
 ### Standard Library Compatibility
 
 - Error handling uses the standard `error` interface
-
 
 ```go
 package main
@@ -202,23 +219,34 @@ import (
 )
 
 func main() {
-	var err *errors.Error
-	err = errors.New("an error occurred").WithCode(errors.InvalidArgument)
-	err.WithDetails(&anypb.Any{
-		TypeUrl: "type.googleapis.com/google.protobuf.StringValue",
-		Value:   []byte("value"),
-	})
-	err.WithDetailFromMap(map[string]any{
-		"key": "value",
-	})
+    var err *errors.Error
+    err = errors.New("an error occurred").WithCode(errors.InvalidArgument)
+    err.WithDetails(&anypb.Any{
+        TypeUrl: "type.googleapis.com/google.protobuf.StringValue",
+        Value:   []byte("value"),
+    })
+    err.WithDetailFromMap(map[string]any{
+        "key": "value",
+    })
 }
 ```
-
 
 ### gRPC Compatibility
 
 - Provides the same registration interfaces as `grpc.ServiceRegistrar`
+- Uses the same service descriptor structures
+
+## Examples
+
+The repository contains working examples that demonstrate various use cases:
+
+- [Basic Server](examples/grpc/grpc-server/main.go) - A simple SRPC server implementation
+- [Basic Client](examples/grpc/grpc-client/main.go) - A corresponding client implementation
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-This project is licensed under the Apache License 2.0 - see the LICENSE file for details.
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
