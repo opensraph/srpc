@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -11,6 +10,7 @@ import (
 	"os"
 
 	"github.com/opensraph/srpc"
+	"github.com/opensraph/srpc/errors"
 	elizav1 "github.com/opensraph/srpc/examples/proto/gen/srpc/eliza/v1"
 )
 
