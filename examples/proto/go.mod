@@ -1,4 +1,4 @@
-module github.com/opensraph/srago/examples/proto
+module github.com/opensraph/srpc/examples/proto
 
 go 1.24.1
 

@@ -1,10 +1,13 @@
 package srpc
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/opensraph/srpc/compress"
 	"github.com/opensraph/srpc/protocol"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
 // HandlerOption is a function that configures the handler options.
@@ -19,10 +22,21 @@ type handlerOptions struct {
 }
 
 func newHandlerOption(desc StreamDesc, srvOpts serverOptions, options []HandlerOption) *handlerOptions {
-	protoPath := extractProtoPath(desc.Procedure)
+	var schema protoreflect.ServiceDescriptor
+	descriptor, _ := protoregistry.GlobalFiles.FindDescriptorByName(protoreflect.FullName(desc.ServiceName))
+	if descriptor != nil {
+		schema, _ = descriptor.(protoreflect.ServiceDescriptor)
+	}
+
+	procedure := fmt.Sprintf("/%s/%s", desc.ServiceName, desc.MethodName)
+	protoPath := extractProtoPath(procedure)
+
 	o := handlerOptions{
-		procedure:  protoPath,
-		streamType: desc.StreamType,
+		procedure:        protoPath,
+		streamType:       desc.StreamType,
+		schema:           schema,
+		idempotencyLevel: desc.IdempotencyLevel,
+		srvOpts:          srvOpts,
 	}
 	for _, opt := range options {
 		opt(&o)
@@ -64,7 +78,7 @@ func (c *handlerOptions) newSpec() protocol.Spec {
 // extractProtoPath returns the trailing portion of the URL's path,
 // corresponding to the Protobuf package, service, and method. It always starts
 // with a slash. Within connect, we use this as (1) Spec.Procedure and (2) the
-// path when mounting handlers on muxes.
+// path when mounting handlers on mux.
 func extractProtoPath(path string) string {
 	segments := strings.Split(path, "/")
 	var pkg, method string

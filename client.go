@@ -2,7 +2,6 @@ package srpc
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/opensraph/srpc/errors"
 	"google.golang.org/grpc"
@@ -67,10 +66,11 @@ func (c *client) NewStream(ctx context.Context, desc *grpc.StreamDesc, method st
 
 		// 调用包装后的处理函数
 		return wrappedHandler(ctx, StreamDesc{
-			StreamType: parseGrpcStreamType(desc),
-			Procedure:  fmt.Sprintf("%s/%s", desc.StreamName, method),
-			Handler:    desc.Handler,
-			IsClient:   true,
+			StreamType:  parseGrpcStreamType(desc),
+			ServiceName: desc.StreamName,
+			MethodName:  method,
+			Handler:     desc.Handler,
+			IsClient:    true,
 		}), err
 	}
 

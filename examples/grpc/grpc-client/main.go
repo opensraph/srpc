@@ -3,19 +3,19 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
-	"net/http"
 	"os"
 
-	"connectrpc.com/connect"
+	"github.com/opensraph/srpc"
 	elizav1 "github.com/opensraph/srpc/examples/proto/gen/srpc/eliza/v1"
-	"github.com/opensraph/srpc/examples/proto/gen/srpc/eliza/v1/elizav1connect"
 )
 
 var (
-	serverAddr = flag.String("addr", "http://localhost:8080", "The server address in the format of host:port")
+	serverAddr = flag.String("addr", "localhost:8080", "The server address in the format of host:port")
 )
 
 func init() {
@@ -23,11 +23,9 @@ func init() {
 }
 
 func main() {
-	client := elizav1connect.NewElizaServiceClient(
-		http.DefaultClient, *serverAddr,
-		// connect.WithHTTPGet(),
-		connect.WithProtoJSON(),
-	)
+	conn := srpc.NewClient(*serverAddr)
+
+	client := elizav1.NewElizaServiceClient(conn)
 
 	fmt.Print("What is your name? ")
 	input := bufio.NewReader(os.Stdin)
@@ -36,28 +34,36 @@ func main() {
 		log.Fatalf("error reading input: %v", err)
 	}
 
-	res, err := client.Say(context.Background(), connect.NewRequest(&elizav1.SayRequest{
+	res, err := client.Say(context.Background(), &elizav1.SayRequest{
 		Sentence: str,
-	}))
+	})
 	if err != nil {
 		log.Fatalf("error sending request: %v", err)
 	}
-	fmt.Println("eliza: ", res.Msg.GetSentence())
+	fmt.Println("eliza: ", res.GetSentence())
 
 	stream, err := client.Introduce(
 		context.Background(),
-		connect.NewRequest(&elizav1.IntroduceRequest{
+		&elizav1.IntroduceRequest{
 			Name: str,
-		}),
+		},
 	)
 	if err != nil {
 		log.Fatalf("error creating stream: %v", err)
 	}
-	for stream.Receive() {
-		fmt.Println("eliza: ", stream.Msg().GetSentence())
-	}
-	if err := stream.Err(); err != nil {
-		log.Fatalf("error receiving message: %v", err)
+	for {
+		res, err := stream.Recv()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			log.Fatalf("error receiving message: %v", err)
+		}
+		if res == nil {
+			log.Fatalf("error receiving message: %v", err)
+		}
+
+		fmt.Println("eliza: ", res.GetSentence())
 	}
 
 	fmt.Println()
@@ -70,11 +76,11 @@ func main() {
 			log.Fatalf("error reading input: %v", err)
 		}
 
-		resp, err := client.Say(context.Background(), connect.NewRequest(&elizav1.SayRequest{Sentence: str}))
+		resp, err := client.Say(context.Background(), &elizav1.SayRequest{Sentence: str})
 		if err != nil {
 			log.Fatalf("error sending request: %v", err)
 		}
-		fmt.Println("eliza: ", resp.Msg.GetSentence())
+		fmt.Println("eliza: ", resp.GetSentence())
 		fmt.Println()
 	}
 }

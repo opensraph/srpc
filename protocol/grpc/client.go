@@ -2,7 +2,6 @@ package grpc
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -286,7 +285,7 @@ func (cc *grpcClientConn) grpcErrorFromTrailer(protobuf encoding.Codec, trailer 
 		return errors.Newf("protocol error: invalid error message %q", message).WithCode(errors.Internal)
 	}
 
-	retErr := errors.NewWireError(errors.Code(code), fmt.Errorf(message))
+	retErr := errors.NewWireError(errors.Code(code), errors.New(message))
 
 	detailsBinaryEncoded := headers.GetHeaderCanonical(trailer, grpcHeaderDetails)
 	if len(detailsBinaryEncoded) > 0 {
@@ -300,7 +299,7 @@ func (cc *grpcClientConn) grpcErrorFromTrailer(protobuf encoding.Codec, trailer 
 		if err := protobuf.Unmarshal(bs, &status); err != nil {
 			return errors.Newf("server returned invalid protobuf for error details: %w", err).WithCode(errors.Internal)
 		}
-		retErr = errors.NewWireError(errors.Code(status.Code), fmt.Errorf(status.Message))
+		retErr = errors.NewWireError(errors.Code(status.Code), errors.New(status.Message))
 		for _, d := range status.GetDetails() {
 			retErr.WithDetails(d)
 		}

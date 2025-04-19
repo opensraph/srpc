@@ -75,12 +75,14 @@ func (i IdempotencyLevel) String() string {
 // If you're using Protobuf, protoc-gen-connect-go generates a constant for the
 // fully-qualified Procedure corresponding to each RPC in your schema.
 type StreamDesc struct {
+	// ServiceName is the name of the service. (e.g., "service.v1.Service")
+	ServiceName string
+	// MethodName is the name of the method being called. (e.g., "Method")
+	MethodName string
 	// Contains the implementation for the methods in this service.
 	ServiceImpl any
 	// StreamType indicates the streaming direction.
 	StreamType StreamType
-	// Procedure is the fully-qualified RPC procedure name (e.g., "/service.v1.Service/Method").
-	Procedure string
 	// Handler is the function that handles the RPC. (e.g., [grpc.MethodHandler] or [grpc.StreamHandler]).
 	Handler any
 	// IsClient indicates if this is a client-side specification.

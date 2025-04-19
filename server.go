@@ -138,8 +138,9 @@ func (s *server) register(sd *grpc.ServiceDesc, ss any) {
 		procedure := s.checkAndGetProcedure(sd.ServiceName, d.MethodName)
 		desc := StreamDesc{
 			ServiceImpl:      ss,
+			ServiceName:      sd.ServiceName,
+			MethodName:       d.MethodName,
 			StreamType:       StreamTypeUnary,
-			Procedure:        procedure,
 			Handler:          d.Handler,
 			IsClient:         false,
 			IdempotencyLevel: IdempotencyNoSideEffects,
@@ -151,9 +152,10 @@ func (s *server) register(sd *grpc.ServiceDesc, ss any) {
 		d := &sd.Streams[i]
 		procedure := s.checkAndGetProcedure(sd.ServiceName, d.StreamName)
 		desc := StreamDesc{
+			ServiceName:      sd.ServiceName,
+			MethodName:       d.StreamName,
 			ServiceImpl:      ss,
 			StreamType:       parseGrpcStreamType(d),
-			Procedure:        procedure,
 			Handler:          d.Handler,
 			IsClient:         false,
 			IdempotencyLevel: IdempotencyUnknown,

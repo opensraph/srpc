@@ -128,7 +128,7 @@ func (e *connectWireError) asError() *errors.Error {
 	if e.Code < errors.MinCode || e.Code > errors.MaxCode {
 		e.Code = errors.Unknown
 	}
-	err := errors.NewWireError(e.Code, fmt.Errorf(e.Message))
+	err := errors.NewWireError(e.Code, errors.New(e.Message))
 	if len(e.Details) > 0 {
 		for _, detail := range e.Details {
 			err.WithDetails(detail.pbAny)
