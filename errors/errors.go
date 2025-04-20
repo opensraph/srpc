@@ -9,6 +9,7 @@ import (
 	spb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/protoadapt"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -66,11 +67,18 @@ func (e *Error) Error() string {
 	return e.status.Message()
 }
 
-func (e *Error) Equals(err error) bool {
-	if e == nil || err == nil {
-		return e == err
+// Is implements future error.Is functionality.
+// A Error is equivalent if the code and message are identical.
+func (e *Error) Is(target error) bool {
+	if e.err != nil {
+		return Is(e.err, target)
 	}
-	return e.Equals(err)
+
+	tse, ok := target.(*Error)
+	if !ok {
+		return false
+	}
+	return proto.Equal(e.status.Proto(), tse.status.Proto())
 }
 
 // Unwrap allows [ge.Is] and [ge.As] access to the underlying error.

@@ -5,14 +5,14 @@ managed:
     - module: buf.build/googleapis/googleapis
   override:
     - file_option: go_package_prefix
-      value: github.com/opensraph/srpc/examples/proto/gen
+      value: github.com/opensraph/srpc/examples/proto/echo
 plugins:
   - remote: buf.build/protocolbuffers/go
-    out: gen
+    out: ./echo
     opt: paths=source_relative
   - remote: buf.build/grpc/go
-    out: gen
+    out: ./echo
     opt: paths=source_relative
   - remote: buf.build/connectrpc/go
-    out: gen
+    out: ./echo
     opt: paths=source_relative

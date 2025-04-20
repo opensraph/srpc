@@ -8,6 +8,7 @@ import (
 
 	"github.com/opensraph/srpc/internal/headers"
 	"github.com/opensraph/srpc/protocol"
+	"google.golang.org/grpc/metadata"
 )
 
 var _ http.Handler = (*Handler)(nil)
@@ -104,6 +105,8 @@ func (h *Handler) ServeHTTP(responseWriter http.ResponseWriter, request *http.Re
 		_ = connCloser.Close(timeoutErr)
 		return
 	}
+
+	ctx = metadata.NewIncomingContext(ctx, metadata.MD(request.Header))
 	_ = connCloser.Close(h.implementation(ctx, connCloser))
 }
 

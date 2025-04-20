@@ -2,6 +2,8 @@ package srpc
 
 import (
 	"context"
+	"errors"
+	"io"
 	"net/http"
 
 	"github.com/opensraph/srpc/internal/headers"
@@ -24,7 +26,13 @@ func (g *grpcServerStreamBridge) Context() context.Context {
 
 // RecvMsg implements grpc.ServerStream.
 func (g *grpcServerStreamBridge) RecvMsg(m any) error {
-	return g.stream.Receive(m)
+	err := g.stream.Receive(m)
+
+	if err != nil && errors.Is(err, io.EOF) {
+		return io.EOF
+	}
+
+	return err
 }
 
 // SendHeader implements grpc.ServerStream.

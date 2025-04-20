@@ -58,8 +58,8 @@ func (c *handlerOptions) newProtocolHandlers() []protocol.ProtocolHandler {
 			CompressionPools: compressors,
 			CompressMinBytes: c.srvOpts.compressMinBytes,
 			BufferPool:       c.srvOpts.bufferPool,
-			ReadMaxBytes:     c.srvOpts.readMaxBytes,
-			SendMaxBytes:     c.srvOpts.sendMaxBytes,
+			ReadMaxBytes:     c.srvOpts.maxReceiveMessageSize,
+			SendMaxBytes:     c.srvOpts.maxSendMessageSize,
 			IdempotencyLevel: protocol.IdempotencyLevel(c.idempotencyLevel),
 		}))
 	}

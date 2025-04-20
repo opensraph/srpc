@@ -6,19 +6,26 @@ import (
 	"net"
 	"net/http"
 	"reflect"
+	"runtime"
 	"sync"
 
 	"github.com/opensraph/srpc/errors"
+	"github.com/opensraph/srpc/internal/srpcsync"
 	"github.com/opensraph/srpc/protocol"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
+	"golang.org/x/net/trace"
 	"google.golang.org/grpc"
+)
+
+var (
+	EnableTracing    bool = true
+	ErrServerStopped      = errors.New("srpc: the server has been stopped")
 )
 
 type Server interface {
 	grpc.ServiceRegistrar
 	Serve(l net.Listener) error
-	ServeTLS(l net.Listener, certFile string, keyFile string) error
 	Stop()
 	GracefulStop()
 	Handle(pattern string, handler http.Handler)
@@ -34,6 +41,14 @@ type server struct {
 	serve   bool
 	streams map[string]StreamDesc
 	mu      sync.Mutex
+	events  trace.EventLog
+
+	quit    *srpcsync.Event
+	done    *srpcsync.Event
+	serveWG sync.WaitGroup
+
+	serverWorkerChannel      chan func()
+	serverWorkerChannelClose func()
 }
 
 func NewServer(opt ...ServerOption) *server {
@@ -45,7 +60,10 @@ func NewServer(opt ...ServerOption) *server {
 		o(&opts)
 	}
 	mux := http.NewServeMux()
-	http2Server := &http2.Server{}
+	http2Server := &http2.Server{
+		MaxConcurrentStreams: opts.maxConcurrentStreams,
+	}
+
 	http1Server := &http.Server{
 		Handler:      h2c.NewHandler(mux, http2Server),
 		ReadTimeout:  opts.readTimeout,
@@ -53,30 +71,83 @@ func NewServer(opt ...ServerOption) *server {
 		IdleTimeout:  opts.idleTimeout,
 	}
 
-	return &server{
+	s := &server{
 		lis:     make(map[net.Listener]bool),
 		opts:    opts,
 		mux:     mux,
 		srv:     http1Server,
-		serve:   false,
 		streams: make(map[string]StreamDesc),
+		quit:    srpcsync.NewEvent(),
+		done:    srpcsync.NewEvent(),
 	}
+
+	if EnableTracing {
+		_, file, line, _ := runtime.Caller(1)
+		s.events = trace.NewEventLog("srpc.Server", fmt.Sprintf("%s:%d", file, line))
+		s.mux.Handle("/debug/event", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			trace.RenderEvents(w, r, true)
+		}))
+
+	}
+
+	if s.opts.numServerWorkers > 0 {
+		s.initServerWorkers()
+	}
+
+	return s
 }
 
 // Serve implements Server.
-func (s *server) Serve(l net.Listener) error {
-	if err := s.run(); err != nil {
-		return err
+func (s *server) Serve(lis net.Listener) error {
+	s.mu.Lock()
+	s.printf("serving")
+	s.serve = true
+	if s.lis == nil {
+		// Serve called after Stop or GracefulStop.
+		s.mu.Unlock()
+		lis.Close()
+		return ErrServerStopped
 	}
-	return s.srv.Serve(l)
-}
 
-// ServeTLS implements Server.
-func (s *server) ServeTLS(l net.Listener, certFile string, keyFile string) error {
-	if err := s.run(); err != nil {
-		return err
+	for procedure, desc := range s.streams {
+		handler := s.newHandler(desc)
+		s.Handle(procedure, handler)
 	}
-	return s.srv.ServeTLS(l, certFile, keyFile)
+
+	s.serveWG.Add(1)
+	defer func() {
+		s.serveWG.Done()
+		if s.quit.HasFired() {
+			// Stop or GracefulStop called; block until done and return nil.
+			<-s.done.Done()
+		}
+	}()
+
+	ls := &listener{
+		Listener: lis,
+		creds:    s.opts.creds,
+	}
+
+	s.lis[ls] = true
+	defer func() {
+		s.mu.Lock()
+		if s.lis != nil && s.lis[ls] {
+			ls.Close()
+			delete(s.lis, ls)
+		}
+		s.mu.Unlock()
+	}()
+
+	s.mu.Unlock()
+
+	for {
+		if err := s.srv.Serve(ls); err != nil {
+			s.errorf("error while listening to https server, err: %v", err)
+			if s.quit.HasFired() {
+				return nil
+			}
+		}
+	}
 }
 
 // Stop stops the sRPC server. It immediately closes all open
@@ -95,18 +166,48 @@ func (s *server) GracefulStop() {
 	s.stop(true)
 }
 
-func (s *server) run() error {
-	if s.srv == nil {
-		return fmt.Errorf("server is not initialized")
-	}
+func (s *server) stop(graceful bool) {
+	s.quit.Fire()
+	defer s.done.Fire()
+
+	s.mu.Lock()
+	s.closeListenersLocked()
+	// Wait for serving threads to be ready to exit.  Only then can we be sure no
+	// new conns will be created.
+	s.mu.Unlock()
+	s.serveWG.Wait()
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.serve = true
-	for procedure, desc := range s.streams {
-		handler := s.newHandler(desc)
-		s.Handle(procedure, handler)
+
+	if graceful {
+		s.printf("graceful stop")
+		s.srv.Shutdown(context.Background())
+	} else {
+		s.printf("stop")
+		s.srv.Close()
 	}
-	return nil
+
+	if s.opts.numServerWorkers > 0 {
+		// Closing the channel (only once, via sync.OnceFunc) after all the
+		// connections have been closed above ensures that there are no
+		// goroutines executing the callback passed to st.HandleStreams (where
+		// the channel is written to).
+		s.serverWorkerChannelClose()
+	}
+
+	if s.events != nil {
+		s.events.Finish()
+		s.events = nil
+	}
+}
+
+// s.mu must be held by the caller.
+func (s *server) closeListenersLocked() {
+	for lis := range s.lis {
+		lis.Close()
+	}
+	s.lis = nil
 }
 
 func (s *server) Handle(pattern string, handler http.Handler) {
@@ -209,72 +310,89 @@ func (s *server) newImplementation(desc StreamDesc, handlerOpts []HandlerOption)
 	}
 }
 
+func (s *server) unaryImplementation(desc StreamDesc, handlerOpts []HandlerOption) Implementation {
+	return func(ctx context.Context, coon protocol.StreamingHandlerConn) error {
+		handler, ok := desc.Handler.(grpc.MethodHandler)
+		if !ok {
+			panic(errors.Newf("invalid unary handler type: %T", desc.Handler))
+		}
+		response, err := handler(desc.ServiceImpl, ctx, coon.Receive, s.opts.interceptor.UnaryInterceptor())
+		if err != nil {
+			return err
+		}
+		return coon.Send(response)
+	}
+}
+
 func (s *server) streamImplementation(desc StreamDesc, handlerOpts []HandlerOption) Implementation {
 	return func(ctx context.Context, conn protocol.StreamingHandlerConn) error {
 		handler, ok := desc.Handler.(grpc.StreamHandler)
 		if !ok {
 			panic(errors.Newf("invalid stream handler type: %T", desc.Handler))
 		}
-		if interceptor := s.opts.interceptor; interceptor != nil {
-			handler = interceptor.WrapStreamingHandler(handler)
-		}
-		return handler(desc.ServiceImpl, newGRPCServerStreamBridge(ctx, conn))
-	}
-}
-
-func (s *server) unaryImplementation(desc StreamDesc, handlerOpts []HandlerOption) Implementation {
-	return func(ctx context.Context, stream protocol.StreamingHandlerConn) error {
-		handler, ok := desc.Handler.(grpc.MethodHandler)
-		if !ok {
-			panic(errors.Newf("invalid unary handler type: %T", desc.Handler))
-		}
-
-		var grpcUnaryServerInterceptor grpc.UnaryServerInterceptor
-		if interceptor := s.opts.interceptor; interceptor != nil {
-			grpcUnaryServerInterceptor = func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
-				return interceptor.WrapUnary(func(ctx context.Context, req any) (any, error) {
-					return handler(ctx, req)
-				})(ctx, req)
+		if interceptor := s.opts.interceptor.StreamInterceptor(); interceptor != nil {
+			err := interceptor(desc.ServiceImpl, newGRPCServerStreamBridge(ctx, conn), &grpc.StreamServerInfo{
+				FullMethod:     fmt.Sprintf("/%s/%s", desc.ServiceName, desc.MethodName),
+				IsClientStream: desc.StreamType.IsClient(),
+				IsServerStream: desc.StreamType.IsServer(),
+			}, handler)
+			if err != nil {
+				return err
 			}
 		}
 
-		response, err := handler(desc.ServiceImpl, ctx, stream.Receive, grpcUnaryServerInterceptor)
-		if err != nil {
-			return err
-		}
-		return stream.Send(response)
+		return handler(desc.ServiceImpl, newGRPCServerStreamBridge(ctx, conn))
 	}
-}
-
-func (s *server) stop(graceful bool) {
-	s.mu.Lock()
-	s.closeListenersLocked()
-	// Wait for serving threads to be ready to exit.  Only then can we be sure no
-	// new conns will be created.
-	s.mu.Unlock()
-
-	if graceful {
-
-	} else {
-	}
-}
-
-// s.mu must be held by the caller.
-func (s *server) closeListenersLocked() {
-	for lis := range s.lis {
-		lis.Close()
-	}
-	s.lis = nil
 }
 
 // printf records an event in s's event log, unless s has been stopped.
 // REQUIRES s.mu is held.
 func (s *server) printf(format string, a ...any) {
-
+	if s.events != nil {
+		s.events.Printf(format, a...)
+	}
 }
 
 // errorf records an error in s's event log, unless s has been stopped.
 // REQUIRES s.mu is held.
 func (s *server) errorf(format string, a ...any) {
+	if s.events != nil {
+		s.events.Errorf(format, a...)
+	}
+}
 
+// serverWorkerResetThreshold defines how often the stack must be reset. Every
+// N requests, by spawning a new goroutine in its place, a worker can reset its
+// stack so that large stacks don't live in memory forever. 2^16 should allow
+// each goroutine stack to live for at least a few seconds in a typical
+// workload (assuming a QPS of a few thousand requests/sec).
+const serverWorkerResetThreshold = 1 << 16
+
+// serverWorker blocks on a *transport.ServerStream channel forever and waits
+// for data to be fed by serveStreams. This allows multiple requests to be
+// processed by the same goroutine, removing the need for expensive stack
+// re-allocations (see the runtime.morestack problem [1]).
+//
+// [1] https://github.com/golang/go/issues/18138
+func (s *server) serverWorker() {
+	for completed := 0; completed < serverWorkerResetThreshold; completed++ {
+		f, ok := <-s.serverWorkerChannel
+		if !ok {
+			return
+		}
+		f()
+	}
+	go s.serverWorker()
+}
+
+// initServerWorkers creates worker goroutines and a channel to process incoming
+// connections to reduce the time spent overall on runtime.morestack.
+func (s *server) initServerWorkers() {
+	s.serverWorkerChannel = make(chan func())
+	s.serverWorkerChannelClose = sync.OnceFunc(func() {
+		close(s.serverWorkerChannel)
+	})
+	for i := uint32(0); i < s.opts.numServerWorkers; i++ {
+		go s.serverWorker()
+	}
 }

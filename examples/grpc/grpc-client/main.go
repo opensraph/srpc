@@ -1,86 +1,154 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"flag"
 	"fmt"
 	"io"
 	"log"
-	"os"
+	"time"
 
 	"github.com/opensraph/srpc"
-	"github.com/opensraph/srpc/errors"
-	elizav1 "github.com/opensraph/srpc/examples/proto/gen/srpc/eliza/v1"
+	"golang.org/x/oauth2"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/oauth"
+	"google.golang.org/grpc/examples/data"
+	ecpb "google.golang.org/grpc/examples/features/proto/echo"
 )
 
-var (
-	serverAddr = flag.String("addr", "localhost:8080", "The server address in the format of host:port")
-)
+var addr = flag.String("addr", "localhost:50051", "the address to connect to")
 
-func init() {
-	flag.Parse()
+const fallbackToken = "some-secret-token"
+
+// logger is to mock a sophisticated logging system. To simplify the example, we just print out the content.
+func logger(format string, a ...any) {
+	fmt.Printf("LOG:\t"+format+"\n", a...)
+}
+
+// unaryInterceptor is an example unary interceptor.
+func unaryInterceptor(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+	var credsConfigured bool
+	for _, o := range opts {
+		_, ok := o.(grpc.PerRPCCredsCallOption)
+		if ok {
+			credsConfigured = true
+			break
+		}
+	}
+	if !credsConfigured {
+		opts = append(opts, grpc.PerRPCCredentials(oauth.TokenSource{
+			TokenSource: oauth2.StaticTokenSource(&oauth2.Token{AccessToken: fallbackToken}),
+		}))
+	}
+	start := time.Now()
+	err := invoker(ctx, method, req, reply, cc, opts...)
+	end := time.Now()
+	logger("RPC: %s, start time: %s, end time: %s, err: %v", method, start.Format("Basic"), end.Format(time.RFC3339), err)
+	return err
+}
+
+// wrappedStream  wraps around the embedded grpc.ClientStream, and intercepts the RecvMsg and
+// SendMsg method call.
+type wrappedStream struct {
+	grpc.ClientStream
+}
+
+func (w *wrappedStream) RecvMsg(m any) error {
+	logger("Receive a message (Type: %T) at %v", m, time.Now().Format(time.RFC3339))
+	return w.ClientStream.RecvMsg(m)
+}
+
+func (w *wrappedStream) SendMsg(m any) error {
+	logger("Send a message (Type: %T) at %v", m, time.Now().Format(time.RFC3339))
+	return w.ClientStream.SendMsg(m)
+}
+
+func newWrappedStream(s grpc.ClientStream) grpc.ClientStream {
+	return &wrappedStream{s}
+}
+
+// streamInterceptor is an example stream interceptor.
+func streamInterceptor(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+	var credsConfigured bool
+	for _, o := range opts {
+		_, ok := o.(*grpc.PerRPCCredsCallOption)
+		if ok {
+			credsConfigured = true
+			break
+		}
+	}
+	if !credsConfigured {
+		opts = append(opts, grpc.PerRPCCredentials(oauth.TokenSource{
+			TokenSource: oauth2.StaticTokenSource(&oauth2.Token{AccessToken: fallbackToken}),
+		}))
+	}
+	s, err := streamer(ctx, desc, cc, method, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return newWrappedStream(s), nil
+}
+
+func callUnaryEcho(client ecpb.EchoClient, message string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	resp, err := client.UnaryEcho(ctx, &ecpb.EchoRequest{Message: message})
+	if err != nil {
+		log.Fatalf("client.UnaryEcho(_) = _, %v: ", err)
+	}
+	fmt.Println("UnaryEcho: ", resp.Message)
+}
+
+func callBidiStreamingEcho(client ecpb.EchoClient) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	c, err := client.BidirectionalStreamingEcho(ctx)
+	if err != nil {
+		return
+	}
+	for i := 0; i < 5; i++ {
+		if err := c.Send(&ecpb.EchoRequest{Message: fmt.Sprintf("Request %d", i+1)}); err != nil {
+			log.Fatalf("failed to send request due to error: %v", err)
+		}
+	}
+	c.CloseSend()
+	for {
+		resp, err := c.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Fatalf("failed to receive response due to error: %v", err)
+		}
+		fmt.Println("BidiStreaming Echo: ", resp.Message)
+	}
 }
 
 func main() {
-	conn := srpc.NewClient(*serverAddr)
+	flag.Parse()
 
-	client := elizav1.NewElizaServiceClient(conn)
-
-	fmt.Print("What is your name? ")
-	input := bufio.NewReader(os.Stdin)
-	str, err := input.ReadString('\n')
+	// Create tls based credential.
+	creds, err := credentials.NewClientTLSFromFile(data.Path("x509/ca_cert.pem"), "x.test.example.com")
 	if err != nil {
-		log.Fatalf("error reading input: %v", err)
+		log.Fatalf("failed to load credentials: %v", err)
 	}
 
-	res, err := client.Say(context.Background(), &elizav1.SayRequest{
-		Sentence: str,
-	})
-	if err != nil {
-		log.Fatalf("error sending request: %v", err)
-	}
-	fmt.Println("eliza: ", res.GetSentence())
-
-	stream, err := client.Introduce(
-		context.Background(),
-		&elizav1.IntroduceRequest{
-			Name: str,
-		},
+	// Set up a connection to the server.
+	conn, err := srpc.NewClient(*addr,
+		srpc.WithGRPCOptions(
+			grpc.WithTransportCredentials(creds),
+		),
+		srpc.WithUnaryInterceptor(unaryInterceptor),
+		srpc.WithStreamInterceptor(streamInterceptor),
 	)
 	if err != nil {
-		log.Fatalf("error creating stream: %v", err)
+		log.Fatalf("did not connect: %v", err)
 	}
-	for {
-		res, err := stream.Recv()
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			log.Fatalf("error receiving message: %v", err)
-		}
-		if res == nil {
-			log.Fatalf("error receiving message: %v", err)
-		}
+	defer conn.Close()
 
-		fmt.Println("eliza: ", res.GetSentence())
-	}
-
-	fmt.Println()
-
-	for {
-		fmt.Print("you: ")
-		input := bufio.NewReader(os.Stdin)
-		str, err := input.ReadString('\n')
-		if err != nil {
-			log.Fatalf("error reading input: %v", err)
-		}
-
-		resp, err := client.Say(context.Background(), &elizav1.SayRequest{Sentence: str})
-		if err != nil {
-			log.Fatalf("error sending request: %v", err)
-		}
-		fmt.Println("eliza: ", resp.GetSentence())
-		fmt.Println()
-	}
+	// Make an echo client and send RPCs.
+	rgc := ecpb.NewEchoClient(conn)
+	callUnaryEcho(rgc, "hello world")
+	callBidiStreamingEcho(rgc)
 }

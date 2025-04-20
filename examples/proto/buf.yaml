@@ -4,11 +4,8 @@ modules:
 deps:
   - buf.build/googleapis/googleapis
 lint:
-  use:
-    - STANDARD
-  except:
-    - RPC_REQUEST_RESPONSE_UNIQUE
-    - RPC_RESPONSE_STANDARD_NAME
+  ignore:
+    - ./echo.proto
 breaking:
   use:
     - FILE

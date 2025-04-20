@@ -18,7 +18,7 @@ type client struct {
 	opts clientOptions
 }
 
-func NewClient(target string, opt ...ClientOption) *client {
+func NewClient(target string, opt ...ClientOption) (*client, error) {
 	opts := defaultClientOptions
 	for _, o := range globalClientOptions {
 		o(&opts)
@@ -26,54 +26,33 @@ func NewClient(target string, opt ...ClientOption) *client {
 	for _, o := range opt {
 		o(&opts)
 	}
+
+	if opts.interceptor.chainUnaryClientInts != nil && len(opts.interceptor.chainUnaryClientInts) > 0 {
+		opts.grpcOpts = append(opts.grpcOpts, grpc.WithChainUnaryInterceptor(opts.interceptor.chainUnaryClientInts...))
+	}
+	if opts.interceptor.chainStreamClientInts != nil && len(opts.interceptor.chainStreamClientInts) > 0 {
+		opts.grpcOpts = append(opts.grpcOpts, grpc.WithChainStreamInterceptor(opts.interceptor.chainStreamClientInts...))
+	}
+
 	conn, err := grpc.NewClient(target, opts.grpcOpts...)
 	if err != nil {
-		panic(errors.Newf("failed to connect to %s: %v", target, err))
+		return nil, errors.Newf("failed to connect to %s: %v", target, err)
 	}
 	return &client{
 		conn: conn,
-	}
+	}, nil
 }
 
 // Invoke implements Client.
 func (c *client) Invoke(ctx context.Context, method string, req, reply any, opts ...grpc.CallOption) error {
-	next := c.conn.Invoke
-	if interceptor := c.opts.interceptor; interceptor != nil {
-		handler := func(ctx context.Context, req any) (any, error) {
-			err := next(ctx, method, req, reply, opts...)
-			return reply, err
-		}
-
-		wrappedHandler := interceptor.WrapUnary(handler)
-		_, err := wrappedHandler(ctx, req)
-		return err
-	}
-
-	return next(ctx, method, req, reply, opts...)
+	return c.conn.Invoke(ctx, method, req, reply, opts...)
 }
 
 // NewStream implements Client.
 func (c *client) NewStream(ctx context.Context, desc *grpc.StreamDesc, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
-	if interceptor := c.opts.interceptor; interceptor != nil {
-		var clientStream grpc.ClientStream
-		var err error
-		handler := StreamingClientFunc(func(ctx context.Context, streamDesc StreamDesc) grpc.ClientStream {
-			clientStream, err = c.conn.NewStream(ctx, desc, method, opts...)
-			return clientStream
-		})
-
-		wrappedHandler := interceptor.WrapStreamingClient(handler)
-
-		// 调用包装后的处理函数
-		return wrappedHandler(ctx, StreamDesc{
-			StreamType:  parseGrpcStreamType(desc),
-			ServiceName: desc.StreamName,
-			MethodName:  method,
-			Handler:     desc.Handler,
-			IsClient:    true,
-		}), err
-	}
-
-	// 没有拦截器时，直接调用原始方法
 	return c.conn.NewStream(ctx, desc, method, opts...)
+}
+
+func (c *client) Close() error {
+	return c.conn.Close()
 }

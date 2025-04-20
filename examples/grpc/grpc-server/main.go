@@ -2,58 +2,146 @@ package main
 
 import (
 	"context"
-	"errors"
+	"flag"
+	"fmt"
 	"io"
+	"log"
 	"net"
+	"strings"
+	"time"
 
 	"github.com/opensraph/srpc"
-	elizav1 "github.com/opensraph/srpc/examples/proto/gen/srpc/eliza/v1"
+	"github.com/opensraph/srpc/errors"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/examples/data"
+	"google.golang.org/grpc/metadata"
+
+	pb "google.golang.org/grpc/examples/features/proto/echo"
 )
 
-func main() {
-	srv := srpc.NewServer()
+var (
+	port = flag.Int("port", 50051, "the port to serve on")
 
-	elizav1.RegisterElizaServiceServer(srv, &elizaImpl{})
+	errMissingMetadata = errors.Newf("missing metadata").WithCode(errors.InvalidArgument)
+	errInvalidToken    = errors.Newf("invalid token").WithCode(errors.Unauthenticated)
+)
 
-	lis, err := net.Listen("tcp", ":8080")
-	if err != nil {
-		panic(err)
-	}
-	if err := srv.Serve(lis); err != nil {
-		panic(err)
-	}
+// logger is to mock a sophisticated logging system. To simplify the example, we just print out the content.
+func logger(format string, a ...any) {
+	fmt.Printf("LOG:\t"+format+"\n", a...)
 }
 
-type elizaImpl struct {
-	elizav1.UnimplementedElizaServiceServer
+type server struct {
+	pb.UnimplementedEchoServer
 }
 
-func (e elizaImpl) Say(_ context.Context, _ *elizav1.SayRequest) (*elizav1.SayResponse, error) {
-	// Our example therapist isn't very sophisticated.
-	return &elizav1.SayResponse{Sentence: "Tell me more about that."}, nil
+func (s *server) UnaryEcho(_ context.Context, in *pb.EchoRequest) (*pb.EchoResponse, error) {
+	fmt.Printf("unary echoing message %q\n", in.Message)
+	return &pb.EchoResponse{Message: in.Message}, nil
 }
 
-func (e elizaImpl) Converse(server elizav1.ElizaService_ConverseServer) error {
+func (s *server) BidirectionalStreamingEcho(stream pb.Echo_BidirectionalStreamingEchoServer) error {
 	for {
-		_, err := server.Recv()
-		if errors.Is(err, io.EOF) {
-			return nil
-		}
-		if err := server.Send(&elizav1.ConverseResponse{
-			Sentence: "Fascinating. Tell me more.",
-		}); err != nil {
+		in, err := stream.Recv()
+		if err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			fmt.Printf("server: error receiving from stream: %v\n", err)
 			return err
 		}
+		fmt.Printf("bidi echoing message %q\n", in.Message)
+		stream.Send(&pb.EchoResponse{Message: in.Message})
 	}
 }
 
-func (e elizaImpl) Introduce(_ *elizav1.IntroduceRequest, server elizav1.ElizaService_IntroduceServer) error {
-	if err := server.Send(&elizav1.IntroduceResponse{
-		Sentence: "Hello",
-	}); err != nil {
-		return err
+// valid validates the authorization.
+func valid(authorization []string) bool {
+	if len(authorization) < 1 {
+		return false
 	}
-	return server.Send(&elizav1.IntroduceResponse{
-		Sentence: "How are you today?",
-	})
+	token := strings.TrimPrefix(authorization[0], "Bearer ")
+	// Perform the token validation here. For the sake of this example, the code
+	// here forgoes any of the usual OAuth2 token validation and instead checks
+	// for a token matching an arbitrary string.
+	return token == "some-secret-token"
+}
+
+func unaryInterceptor(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+	// authentication (token verification)
+	md, ok := metadata.FromIncomingContext(ctx)
+
+	if !ok {
+		return nil, errMissingMetadata
+	}
+	if !valid(md["authorization"]) {
+		return nil, errInvalidToken
+	}
+	m, err := handler(ctx, req)
+	if err != nil {
+		logger("RPC failed with error: %v", err)
+	}
+	return m, err
+}
+
+// wrappedStream wraps around the embedded grpc.ServerStream, and intercepts the RecvMsg and
+// SendMsg method call.
+type wrappedStream struct {
+	grpc.ServerStream
+}
+
+func (w *wrappedStream) RecvMsg(m any) error {
+	logger("Receive a message (Type: %T) at %s", m, time.Now().Format(time.RFC3339))
+	return w.ServerStream.RecvMsg(m)
+}
+
+func (w *wrappedStream) SendMsg(m any) error {
+	logger("Send a message (Type: %T) at %v", m, time.Now().Format(time.RFC3339))
+	return w.ServerStream.SendMsg(m)
+}
+
+func newWrappedStream(s grpc.ServerStream) grpc.ServerStream {
+	return &wrappedStream{s}
+}
+
+func streamInterceptor(srv any, ss grpc.ServerStream, _ *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	// authentication (token verification)
+	md, ok := metadata.FromIncomingContext(ss.Context())
+	if !ok {
+		return errMissingMetadata
+	}
+	if !valid(md["authorization"]) {
+		return errInvalidToken
+	}
+
+	err := handler(srv, newWrappedStream(ss))
+	if err != nil {
+		logger("RPC failed with error: %v", err)
+	}
+	return err
+}
+
+func main() {
+	flag.Parse()
+
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", *port))
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+
+	// Create tls based credential.
+	creds, err := credentials.NewServerTLSFromFile(data.Path("x509/server_cert.pem"), data.Path("x509/server_key.pem"))
+	if err != nil {
+		log.Fatalf("failed to create credentials: %v", err)
+	}
+
+	s := srpc.NewServer(srpc.Creds(creds), srpc.UnaryInterceptor(unaryInterceptor), srpc.StreamInterceptor(streamInterceptor))
+
+	// Register EchoServer on the server.
+	pb.RegisterEchoServer(s, &server{})
+
+	if err := s.Serve(lis); err != nil {
+		log.Fatalf("failed to serve: %v", err)
+	}
 }

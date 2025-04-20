@@ -77,7 +77,7 @@ func WrapHandlerConnWithCodedErrors(conn HandlerConnCloser) HandlerConnCloser {
 	return &errorTranslatingHandlerConnCloser{
 		HandlerConnCloser: conn,
 		toWire:            errors.FromContextError,
-		fromWire:          wrapIfUnCoded,
+		fromWire:          wrapIfUncoded,
 	}
 }
 
@@ -86,15 +86,15 @@ func WrapHandlerConnWithCodedErrors(conn HandlerConnCloser) HandlerConnCloser {
 func WrapClientConnWithCodedErrors(conn StreamingClientConn) StreamingClientConn {
 	return &errorTranslatingClientConn{
 		StreamingClientConn: conn,
-		fromWire:            wrapIfUnCoded,
+		fromWire:            wrapIfUncoded,
 	}
 }
 
-// wrapIfUnCoded ensures that all errors are wrapped. It leaves already-wrapped
+// wrapIfUncoded ensures that all errors are wrapped. It leaves already-wrapped
 // errors unchanged, uses wrapIfContextError to apply codes to context.Canceled
 // and context.DeadlineExceeded, and falls back to wrapping other errors with
 // CodeUnknown.
-func wrapIfUnCoded(err error) error {
+func wrapIfUncoded(err error) error {
 	if err == nil {
 		return nil
 	}
