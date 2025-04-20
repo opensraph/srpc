@@ -28,7 +28,6 @@ func (l *listener) Accept() (net.Conn, error) {
 	if l.creds != nil {
 		c, _, err := l.creds.ServerHandshake(rawConn)
 		if err != nil {
-			rawConn.Close()
 			return nil, err
 		}
 		rawConn = c
