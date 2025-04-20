@@ -1,8 +1,6 @@
 package protocol
 
 import (
-	"context"
-	"fmt"
 	"net/http"
 
 	"github.com/opensraph/srpc/errors"
@@ -103,40 +101,4 @@ func wrapIfUncoded(err error) error {
 		return maybeCodedErr
 	}
 	return errors.FromError(err).WithCode(errors.Unknown)
-}
-
-// WrapIfContextDone wraps errors with CodeCanceled or CodeDeadlineExceeded
-// if the context is done. It leaves already-wrapped errors unchanged.
-func WrapIfContextDone(ctx context.Context, err error) error {
-	if err == nil {
-		return nil
-	}
-	err = errors.FromContextError(err)
-	if ok := errors.As(err, new(*errors.Error)); ok {
-		return err
-	}
-	ctxErr := ctx.Err()
-	if errors.Is(ctxErr, context.Canceled) {
-		return errors.FromError(err).WithCode(errors.Canceled)
-	} else if errors.Is(ctxErr, context.DeadlineExceeded) {
-		return errors.FromError(err).WithCode(errors.DeadlineExceeded)
-	}
-	return err
-}
-
-// WrapIfMaxBytesError wraps errors returned reading from a http.MaxBytesHandler
-// whose limit has been exceeded.
-func WrapIfMaxBytesError(err error, tmpl string, args ...any) error {
-	if err == nil {
-		return nil
-	}
-	if ok := errors.As(err, new(*errors.Error)); ok {
-		return err
-	}
-	var maxBytesErr *http.MaxBytesError
-	if ok := errors.As(err, &maxBytesErr); !ok {
-		return err
-	}
-	prefix := fmt.Sprintf(tmpl, args...)
-	return errors.Newf("%s: exceeded %d byte http.MaxBytesReader limit", prefix, maxBytesErr.Limit).WithCode(errors.ResourceExhausted)
 }

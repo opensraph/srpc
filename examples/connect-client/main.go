@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -65,7 +66,7 @@ func bidiStreamingCall(client echov1connect.EchoClient, messages []string) {
 	for {
 		resp, err := stream.Receive()
 		if err != nil {
-			if err == io.EOF || connect.CodeOf(err) == connect.CodeUnavailable {
+			if errors.Is(err, io.EOF) || connect.CodeOf(err) == connect.CodeUnavailable {
 				break // Stream closed
 			}
 			log.Printf("Failed to receive response: %v", err)

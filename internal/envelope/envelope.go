@@ -57,7 +57,11 @@ func (e *Envelope) Read(data []byte) (int, error) {
 	if remainingData := e.Data.Materialize(); len(remainingData) > 0 {
 		n := copy(data, remainingData[e.offset-envelopePrefixLength:])
 		e.offset += int64(n)
-		return handleEOF(e.offset, int64(len(remainingData)+envelopePrefixLength))
+		readN := n
+		if readN == 0 && e.offset == int64(len(remainingData)+envelopePrefixLength) {
+			return 0, io.EOF
+		}
+		return readN, nil
 	}
 	return 0, io.EOF
 }
@@ -272,33 +276,68 @@ func (r *EnvelopeReader) Unmarshal(message any) error {
 
 // Read reads an Envelope from the underlying reader.
 func (r *EnvelopeReader) Read(env *Envelope) error {
-	prefixes := [envelopePrefixLength]byte{}
+	prefixes := [5]byte{}
+	// io.ReadFull reads the number of bytes requested, or returns an error.
+	// io.EOF will only be returned if no bytes were read.
 	n, err := io.ReadFull(r.Reader, prefixes[:])
 	r.BytesRead += int64(n)
 	if err != nil {
-		return handleReadError(err)
+		if errors.Is(err, io.EOF) {
+			return errors.FromError(err).WithCode(errors.Unknown)
+		}
+		err = errors.WrapIfMaxBytesError(err, "read 5 byte message prefix")
+		err = errors.WrapIfContextDone(r.Ctx, err)
+		if ok := errors.As(err, new(*errors.Error)); ok {
+			return err
+		}
+		// Something else has gone wrong - the stream didn't end cleanly.
+		return errors.Newf(
+			"[envelope] protocol error: incomplete envelope: %w", err,
+		).WithCode(errors.InvalidArgument)
 	}
 	size := int64(binary.BigEndian.Uint32(prefixes[1:5]))
 	if r.ReadMaxBytes > 0 && size > int64(r.ReadMaxBytes) {
-		return handleOversizeMessage(r, size)
-	}
-	data, err := mem.ReadAll(r.Reader, r.BufferPool)
-	if err != nil {
-		readN := int64(data.Len())
-		return handleIncompleteMessage(err, size, readN)
+		n, err := io.CopyN(io.Discard, r.Reader, size)
+		r.BytesRead += n
+		if err != nil && !errors.Is(err, io.EOF) {
+			return errors.Newf(
+				"[envelope] message size %d exceeds configured max %d - unable to determine message size: %w",
+				size, r.ReadMaxBytes, err,
+			).WithCode(errors.ResourceExhausted)
+
+		}
+		return errors.Newf(
+			"[envelope] message size %d exceeds configured max %d", size, r.ReadMaxBytes,
+		).WithCode(errors.ResourceExhausted)
 	}
 
-	env.Data = data
+	w := mem.NewWriter(&env.Data, r.BufferPool)
+	// We've read the prefix, so we know how many bytes to expect.
+	// CopyN will return an error if it doesn't read the requested
+	// number of bytes.
+	readN, err := io.CopyN(w, r.Reader, size)
+	r.BytesRead += readN
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			// We've gotten fewer bytes than we expected, so the stream has ended
+			// unexpectedly.
+			return errors.Newf(
+				"[envelope] protocol error: promised %d bytes in enveloped message, got %d bytes",
+				size,
+				readN,
+			).WithCode(errors.InvalidArgument)
+		}
+		err = errors.WrapIfMaxBytesError(err, "read %d byte message", size)
+		err = errors.WrapIfContextDone(r.Ctx, err)
+		if ok := errors.As(err, new(*errors.Error)); ok {
+			return err
+		}
+		return errors.Newf(
+			"[envelope] read enveloped message: %w", err,
+		).WithCode(errors.Unknown)
+	}
 	env.Flags = prefixes[0]
 	return nil
-}
-
-// Helper to handle EOF edge cases
-func handleEOF(offset, total int64) (int, error) {
-	if offset >= total {
-		return 0, io.EOF
-	}
-	return 0, nil
 }
 
 // Helper to generate envelope prefix
@@ -313,26 +352,4 @@ func makeEnvelopePrefix(flags uint8, size int) ([5]byte, error) {
 		byte(size >> 8),
 		byte(size),
 	}, nil
-}
-
-// Helper to handle read errors
-func handleReadError(err error) error {
-	if errors.Is(err, io.EOF) {
-		return errors.FromError(err).WithCode(errors.Unknown)
-	}
-	return errors.Newf("[envelope] protocol error: incomplete envelope: %w", err).WithCode(errors.InvalidArgument)
-}
-
-// Helper to handle oversized messages
-func handleOversizeMessage(r *EnvelopeReader, size int64) error {
-	io.CopyN(io.Discard, r.Reader, size)
-	return errors.Newf("[envelope] message size %d exceeds max %d", size, r.ReadMaxBytes).WithCode(errors.ResourceExhausted)
-}
-
-// Helper to handle incomplete messages
-func handleIncompleteMessage(err error, size, readN int64) error {
-	if errors.Is(err, io.EOF) {
-		return errors.Newf("promised %d bytes, got %d bytes", size, readN).WithCode(errors.InvalidArgument)
-	}
-	return errors.Newf("[envelope] read envelope message: %w", err).WithCode(errors.Unknown)
 }

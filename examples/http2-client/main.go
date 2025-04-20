@@ -4,15 +4,19 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"golang.org/x/net/http2"
+	"google.golang.org/protobuf/encoding/protojson"
+
+	pb "github.com/opensraph/srpc/examples/proto/echo"
 )
 
 var (
@@ -21,110 +25,171 @@ var (
 	serviceName = "srpc.examples.echo.Echo"
 )
 
-type EchoRequest struct {
-	Message string `json:"message"`
+// HTTP/2 client
+var client *http.Client
+
+// Initialize HTTP/2 client
+func init() {
+	client = &http.Client{
+		Transport: &http2.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true, // Note: Don't skip certificate validation in production
+			},
+		},
+	}
 }
 
-type EchoResponse struct {
-	Message string `json:"message"`
-}
+// Execute unary call
+func unaryCall(message string) {
+	fmt.Println("--- Executing Unary Call ---")
 
-func unaryCall(client *http.Client, message string) {
+	// Build request body
+	reqBody, err := protojson.Marshal(&pb.EchoRequest{Message: message})
+	if err != nil {
+		log.Fatalf("Failed to encode request: %v", err)
+	}
+
+	// Create HTTP request
 	url := fmt.Sprintf("%s/%s/UnaryEcho", *serverAddr, serviceName)
-	reqBody, _ := json.Marshal(EchoRequest{Message: message})
-
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, bytes.NewReader(reqBody))
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(reqBody))
 	if err != nil {
 		log.Fatalf("Failed to create request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+*authToken)
-	req.Header.Set("Content-Type", "application/json")
 
+	// Set request headers
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+*authToken)
+
+	// Send request
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Fatalf("Unary call failed: %v", err)
+		log.Fatalf("Request failed: %v", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		log.Fatalf("Unary call returned status: %v", resp.Status)
+	// Read response
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatalf("Failed to read response: %v", err)
 	}
 
-	var echoResp EchoResponse
-	if err := json.NewDecoder(resp.Body).Decode(&echoResp); err != nil {
-		log.Fatalf("Failed to decode response: %v", err)
+	// Check status code
+	if resp.StatusCode != 200 {
+		log.Fatalf("Request failed, status code: %d, response: %s", resp.StatusCode, string(body))
 	}
-	fmt.Printf("Unary response: %s\n", echoResp.Message)
+
+	// Parse response
+	var response pb.EchoResponse
+	if err := protojson.Unmarshal(body, &response); err != nil {
+		log.Fatalf("Failed to parse response: %v", err)
+	}
+
+	fmt.Printf("Unary call response: %s\n", response.Message)
 }
 
-func bidiStreamingCall(client *http.Client, messages []string) {
+// Execute bidirectional streaming call
+// TODO: Now it is cannot use.
+func bidiStreamingCall(messages []string) {
+	fmt.Println("--- Executing Bidirectional Streaming Call ---")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Create HTTP request
 	url := fmt.Sprintf("%s/%s/BidirectionalStreamingEcho", *serverAddr, serviceName)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, nil) // Initialize as nil, we will use ReadWriter
+	if err != nil {
+		log.Fatalf("Failed to create request: %v", err)
+	}
 
-	// Create pipe for streaming data
+	// Set request headers
+	req.Header.Set("Content-Type", "application/connect+json")
+	req.Header.Set("Authorization", "Bearer "+*authToken)
+	req.Header.Set("Accept", "application/connect+json")
+	req.Header.Set("Connect-Protocol-Version", "1")
+
+	// Create bidirectional pipe
 	pr, pw := io.Pipe()
+	req.Body = pr
 
-	// Send messages in a goroutine
+	// Start a goroutine to send messages
 	go func() {
 		defer pw.Close()
-		encoder := json.NewEncoder(pw)
+
+		// Send messages
 		for _, msg := range messages {
-			req := EchoRequest{Message: msg}
-			if err := encoder.Encode(req); err != nil {
-				log.Printf("Failed to send message: %v", err)
+			// Create message
+			reqBody, err := protojson.Marshal(&pb.EchoRequest{Message: msg})
+			if err != nil {
+				log.Printf("Failed to encode request: %v", err)
 				return
 			}
-			fmt.Printf("Sending message: %s\n", msg)
+
+			// Write message directly without length prefix
+			if _, err := pw.Write(reqBody); err != nil {
+				log.Printf("Failed to write request: %v", err)
+				return
+			}
+
+			fmt.Printf("Sent message: %s\n", msg)
 			time.Sleep(500 * time.Millisecond) // Simulate interval between sends
 		}
 	}()
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, pr)
-	if err != nil {
-		log.Fatalf("Failed to create request: %v", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+*authToken)
-	req.Header.Set("Content-Type", "application/connect+json")
-	req.Header.Set("Accept", "application/connect+json")
-
+	// Send request and get response
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Fatalf("Bidirectional stream call failed: %v", err)
+		log.Fatalf("Failed to send request: %v", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
+	// Check status code
+	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
-		log.Fatalf("Bidirectional stream call returned status: %v, content: %s", resp.Status, string(body))
+		log.Fatalf("Request failed, status code: %d, response: %s", resp.StatusCode, string(body))
 	}
 
-	// Read streaming responses
-	decoder := json.NewDecoder(resp.Body)
+	unmarshaller := protojson.UnmarshalOptions{}
+
 	for {
-		var echoResp EchoResponse
-		if err := decoder.Decode(&echoResp); err != nil {
-			if err == io.EOF {
-				break
-			}
-			log.Printf("Failed to parse response: %v", err)
+		buf := bytes.NewBuffer(make([]byte, 0))
+		_, err := buf.ReadFrom(resp.Body)
+		if err != nil {
+			log.Printf("Failed to read response: %v", err)
 			break
 		}
-		fmt.Printf("Received response: %s\n", echoResp.Message)
+
+		var response pb.EchoResponse
+		// Read message
+
+		if err := unmarshaller.Unmarshal(buf.Bytes(), &response); err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			log.Printf("Failed to decode response: %v", err)
+			break
+		}
+
+		fmt.Printf("Received response: %s\n", response.Message)
+		time.Sleep(500 * time.Millisecond) // Simulate interval between receives
 	}
 }
 
 func main() {
 	flag.Parse()
 
-	// Create HTTP/2 client
-	client := &http.Client{
-		Transport: &http2.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		},
-	}
+	// Ensure serverAddr doesn't end with /
+	*serverAddr = strings.TrimSuffix(*serverAddr, "/")
 
-	// Perform Unary call
-	unaryCall(client, "Hello, Unary HTTP/2!")
+	// Execute unary call
+	unaryCall("Hello from HTTP/2 client!")
 
-	// Perform Bidirectional Streaming call
-	bidiStreamingCall(client, []string{"Hello", "from", "Bidirectional", "Streaming", "HTTP/2!"})
+	// Execute bidirectional streaming call
+	bidiStreamingCall([]string{
+		"Stream message 1",
+		"Stream message 2",
+		"Stream message 3",
+		"Stream message 4",
+		"Stream message 5",
+	})
 }

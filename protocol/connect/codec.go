@@ -16,7 +16,6 @@ import (
 	"github.com/opensraph/srpc/internal/envelope"
 	"github.com/opensraph/srpc/internal/headers"
 	"github.com/opensraph/srpc/mem"
-	"github.com/opensraph/srpc/protocol"
 )
 
 // stableCodec is an extension to Codec for serializing with stable output.
@@ -300,8 +299,8 @@ func (u *connectUnaryUnmarshaler) UnmarshalFunc(message any, unmarshal func(mem.
 	w := mem.NewWriter(&data, u.bufferPool)
 	bytesRead, err := io.Copy(w, reader)
 	if err != nil {
-		err = protocol.WrapIfMaxBytesError(err, "read first %d bytes of message", bytesRead)
-		err = protocol.WrapIfContextDone(u.ctx, err)
+		err = errors.WrapIfMaxBytesError(err, "read first %d bytes of message", bytesRead)
+		err = errors.WrapIfContextDone(u.ctx, err)
 		if ok := errors.As(err, new(*errors.Error)); ok {
 			return err
 		}
