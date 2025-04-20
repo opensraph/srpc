@@ -75,12 +75,3 @@ func (s StreamType) String() string {
 	}
 	return fmt.Sprintf("stream_%d", s)
 }
-
-// IsUnary returns true if the stream type is unary or stream-server.
-func IsSendUnary(streamType StreamType) bool {
-	return streamType&StreamTypeClient == 0
-}
-
-func IsRecvUnary(streamType StreamType) bool {
-	return (streamType & StreamTypeServer) == StreamTypeServer
-}

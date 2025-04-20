@@ -12,8 +12,8 @@ func TestStreamTypeString(t *testing.T) {
 	assert.True(t, StreamTypeClient&StreamTypeClient != 0)
 	assert.True(t, StreamTypeBidi&StreamTypeClient != 0)
 
-	assert.Equal(t, StreamTypeUnary&StreamTypeServer, StreamTypeServer)
+	assert.Equal(t, StreamTypeUnary&StreamTypeServer, StreamTypeUnary)
 	assert.Equal(t, StreamTypeServer&StreamTypeServer, StreamTypeServer)
-	assert.NotEqual(t, StreamTypeClient&StreamTypeServer, StreamTypeServer)
-	assert.NotEqual(t, StreamTypeBidi&StreamTypeServer, StreamTypeServer)
+	assert.Equal(t, StreamTypeClient&StreamTypeServer, StreamTypeUnary)
+	assert.Equal(t, StreamTypeBidi&StreamTypeServer, StreamTypeServer)
 }
