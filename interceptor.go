@@ -122,15 +122,18 @@ func (i *Interceptor) StreamInterceptor() StreamServerInterceptor {
 
 func chainStreamInterceptors(interceptors []StreamServerInterceptor) StreamServerInterceptor {
 	return func(srv any, ss ServerStream, info *StreamServerInfo, handler StreamHandler) error {
+		// Start the chain with the first interceptor
 		return interceptors[0](srv, ss, info, getChainStreamHandler(interceptors, 0, info, handler))
 	}
 }
 
 func getChainStreamHandler(interceptors []StreamServerInterceptor, curr int, info *StreamServerInfo, finalHandler StreamHandler) StreamHandler {
 	if curr == len(interceptors)-1 {
+		// If it's the last interceptor, call the final handler
 		return finalHandler
 	}
 	return func(srv any, stream ServerStream) error {
+		// Call the next interceptor in the chain
 		return interceptors[curr+1](srv, stream, info, getChainStreamHandler(interceptors, curr+1, info, finalHandler))
 	}
 }

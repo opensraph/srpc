@@ -9,12 +9,12 @@ import (
 	"time"
 
 	"github.com/opensraph/srpc"
+	ecpb "github.com/opensraph/srpc/examples/proto/echo"
 	"golang.org/x/oauth2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/oauth"
 	"google.golang.org/grpc/examples/data"
-	ecpb "google.golang.org/grpc/examples/features/proto/echo"
 )
 
 var addr = flag.String("addr", "localhost:50051", "the address to connect to")
@@ -107,12 +107,20 @@ func callBidiStreamingEcho(client ecpb.EchoClient) {
 	if err != nil {
 		return
 	}
-	for i := 0; i < 5; i++ {
-		if err := c.Send(&ecpb.EchoRequest{Message: fmt.Sprintf("Request %d", i+1)}); err != nil {
-			log.Fatalf("failed to send request due to error: %v", err)
+
+	// Send messages in a goroutine
+	go func() {
+		for i := 0; i < 5; i++ {
+			if err := c.Send(&ecpb.EchoRequest{Message: fmt.Sprintf("Request %d", i+1)}); err != nil {
+				log.Fatalf("failed to send request due to error: %v", err)
+			}
+			time.Sleep(500 * time.Millisecond) // Simulate interval between sends
 		}
-	}
-	c.CloseSend()
+		// Close sending side when done
+		if err := c.CloseSend(); err != nil {
+			log.Fatalf("failed to close send stream due to error: %v", err)
+		}
+	}()
 	for {
 		resp, err := c.Recv()
 		if err == io.EOF {

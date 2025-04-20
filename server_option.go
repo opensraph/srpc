@@ -24,7 +24,7 @@ import (
 
 const (
 	defaultServerMaxConcurrentStreams  = math.MaxUint32
-	defaultServerMaxReceiveMessageSize = 1024 * 1024 * 4
+	defaultServerMaxReceiveMessageSize = 4 * 1024 * 1024 // 4MB
 	defaultServerMaxSendMessageSize    = math.MaxInt32
 )
 

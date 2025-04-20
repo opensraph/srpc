@@ -17,7 +17,7 @@ import (
 	"google.golang.org/grpc/examples/data"
 	"google.golang.org/grpc/metadata"
 
-	pb "google.golang.org/grpc/examples/features/proto/echo"
+	pb "github.com/opensraph/srpc/examples/proto/echo"
 )
 
 var (

@@ -328,19 +328,21 @@ func (s *server) streamImplementation(desc StreamDesc, handlerOpts []HandlerOpti
 	return func(ctx context.Context, conn protocol.StreamingHandlerConn) error {
 		handler, ok := desc.Handler.(grpc.StreamHandler)
 		if !ok {
-			panic(errors.Newf("invalid stream handler type: %T", desc.Handler))
-		}
-		if interceptor := s.opts.interceptor.StreamInterceptor(); interceptor != nil {
-			err := interceptor(desc.ServiceImpl, newGRPCServerStreamBridge(ctx, conn), &grpc.StreamServerInfo{
-				FullMethod:     fmt.Sprintf("/%s/%s", desc.ServiceName, desc.MethodName),
-				IsClientStream: desc.StreamType.IsClient(),
-				IsServerStream: desc.StreamType.IsServer(),
-			}, handler)
-			if err != nil {
-				return err
-			}
+			return errors.Newf("invalid stream handler type: %T", desc.Handler)
 		}
 
+		streamInfo := &grpc.StreamServerInfo{
+			FullMethod:     fmt.Sprintf("/%s/%s", desc.ServiceName, desc.MethodName),
+			IsClientStream: desc.StreamType.IsClient(),
+			IsServerStream: desc.StreamType.IsServer(),
+		}
+
+		// Apply stream interceptor if available
+		if interceptor := s.opts.interceptor.StreamInterceptor(); interceptor != nil {
+			return interceptor(desc.ServiceImpl, newGRPCServerStreamBridge(ctx, conn), streamInfo, handler)
+		}
+
+		// Directly invoke the handler if no interceptor is present
 		return handler(desc.ServiceImpl, newGRPCServerStreamBridge(ctx, conn))
 	}
 }

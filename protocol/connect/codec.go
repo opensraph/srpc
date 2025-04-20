@@ -274,6 +274,7 @@ type connectUnaryUnmarshaler struct {
 	ctx             context.Context //nolint:containedctx
 	reader          io.Reader
 	codec           encoding.Codec
+	compressionName string
 	compressionPool *compress.CompressionPool
 	bufferPool      mem.BufferPool
 	alreadyRead     bool

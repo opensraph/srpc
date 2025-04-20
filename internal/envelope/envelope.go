@@ -22,7 +22,7 @@ const (
 )
 
 var ErrSpecialEnvelope = errors.Newf(
-	"final message has protocol-specific flags: %w",
+	"[envelope] final message has protocol-specific flags: %w",
 	io.EOF,
 ).WithCode(errors.Unknown)
 
@@ -126,6 +126,7 @@ type EnvelopeWriter struct {
 	Sender           duplex.MessageSender
 	Codec            encoding.Codec
 	CompressMinBytes int
+	CompressionName  string
 	CompressionPool  *compress.CompressionPool
 	BufferPool       mem.BufferPool
 	SendMaxBytes     int
@@ -135,7 +136,7 @@ type EnvelopeWriter struct {
 func (w *EnvelopeWriter) Marshal(message any) error {
 	marshaledBytes, err := w.Codec.Marshal(message)
 	if err != nil {
-		return errors.Newf("marshal message: %w", err).WithCode(errors.Internal)
+		return errors.Newf("[envelope] marshal message: %w", err).WithCode(errors.Internal)
 	}
 	envelope := &Envelope{Data: marshaledBytes}
 	return w.Write(envelope)
@@ -148,7 +149,7 @@ func (w *EnvelopeWriter) Write(env *Envelope) error {
 		env.Data.Len() < w.CompressMinBytes {
 		if w.SendMaxBytes > 0 && env.Data.Len() > w.SendMaxBytes {
 			return errors.Newf(
-				"message size %d exceeds sendMaxBytes %d", env.Data.Len(), w.SendMaxBytes,
+				"[envelope] message size %d exceeds sendMaxBytes %d", env.Data.Len(), w.SendMaxBytes,
 			).WithCode(errors.ResourceExhausted)
 		}
 		return w.write(env)
@@ -159,7 +160,7 @@ func (w *EnvelopeWriter) Write(env *Envelope) error {
 	}
 	if w.SendMaxBytes > 0 && data.Len() > w.SendMaxBytes {
 		return errors.Newf(
-			"compressed message size %d exceeds sendMaxBytes %d", data.Len(), w.SendMaxBytes,
+			"[envelope] compressed message size %d exceeds sendMaxBytes %d", data.Len(), w.SendMaxBytes,
 		).WithCode(errors.ResourceExhausted)
 	}
 	return w.write(&Envelope{
@@ -171,7 +172,7 @@ func (w *EnvelopeWriter) Write(env *Envelope) error {
 // Helper to write envelope
 func (w *EnvelopeWriter) write(env *Envelope) error {
 	if _, err := w.Sender.Send(env); err != nil {
-		return errors.Newf("write envelope: %w", err).WithCode(errors.Unknown)
+		return errors.Newf("[envelope] write envelope: %w", err).WithCode(errors.Unknown)
 	}
 	return nil
 }
@@ -196,6 +197,7 @@ type EnvelopeReader struct {
 	Reader          io.Reader
 	BytesRead       int64
 	Codec           encoding.Codec
+	CompressionName string
 	CompressionPool *compress.CompressionPool
 	ReadMaxBytes    int
 }
@@ -244,11 +246,11 @@ func (r *EnvelopeReader) Unmarshal(message any) error {
 				return connErr
 			}
 			return errors.Newf(
-				"corrupt response: I/O error after end-stream message: %w", err,
+				"[envelope] corrupt response: I/O error after end-stream message: %w", err,
 			).WithCode(errors.Internal)
 		} else if numBytes > 0 {
 			return errors.Newf(
-				"corrupt response: %d extra bytes after end of stream", numBytes,
+				"[envelope] corrupt response: %d extra bytes after end of stream", numBytes,
 			).WithCode(errors.Internal)
 		}
 		// One of the protocol-specific flags are set, so this is the end of the
@@ -263,7 +265,7 @@ func (r *EnvelopeReader) Unmarshal(message any) error {
 	}
 
 	if err := r.Codec.Unmarshal(data, message); err != nil {
-		return errors.Newf("unmarshal message: %w", err).WithCode(errors.InvalidArgument)
+		return errors.Newf("[envelope] unmarshal message: %w", err).WithCode(errors.InvalidArgument)
 	}
 	return nil
 }
@@ -280,12 +282,13 @@ func (r *EnvelopeReader) Read(env *Envelope) error {
 	if r.ReadMaxBytes > 0 && size > int64(r.ReadMaxBytes) {
 		return handleOversizeMessage(r, size)
 	}
-	w := mem.NewWriter(&env.Data, r.BufferPool)
-	readN, err := io.CopyN(w, r.Reader, size)
-	r.BytesRead += readN
+	data, err := mem.ReadAll(r.Reader, r.BufferPool)
 	if err != nil {
+		readN := int64(data.Len())
 		return handleIncompleteMessage(err, size, readN)
 	}
+
+	env.Data = data
 	env.Flags = prefixes[0]
 	return nil
 }
@@ -317,13 +320,13 @@ func handleReadError(err error) error {
 	if errors.Is(err, io.EOF) {
 		return errors.FromError(err).WithCode(errors.Unknown)
 	}
-	return errors.Newf("protocol error: incomplete envelope: %w", err).WithCode(errors.InvalidArgument)
+	return errors.Newf("[envelope] protocol error: incomplete envelope: %w", err).WithCode(errors.InvalidArgument)
 }
 
 // Helper to handle oversized messages
 func handleOversizeMessage(r *EnvelopeReader, size int64) error {
 	io.CopyN(io.Discard, r.Reader, size)
-	return errors.Newf("message size %d exceeds max %d", size, r.ReadMaxBytes).WithCode(errors.ResourceExhausted)
+	return errors.Newf("[envelope] message size %d exceeds max %d", size, r.ReadMaxBytes).WithCode(errors.ResourceExhausted)
 }
 
 // Helper to handle incomplete messages
@@ -331,5 +334,5 @@ func handleIncompleteMessage(err error, size, readN int64) error {
 	if errors.Is(err, io.EOF) {
 		return errors.Newf("promised %d bytes, got %d bytes", size, readN).WithCode(errors.InvalidArgument)
 	}
-	return errors.Newf("read envelope message: %w", err).WithCode(errors.Unknown)
+	return errors.Newf("[envelope] read envelope message: %w", err).WithCode(errors.Unknown)
 }

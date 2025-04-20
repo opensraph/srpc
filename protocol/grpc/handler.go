@@ -83,6 +83,7 @@ func (g *grpcHandler) NewConn(responseWriter http.ResponseWriter, request *http.
 			EnvelopeWriter: envelope.EnvelopeWriter{
 				Ctx:              ctx,
 				Sender:           envelope.WriteSender{Writer: responseWriter},
+				CompressionName:  responseCompression,
 				CompressionPool:  g.CompressionPools.Get(responseCompression),
 				Codec:            cc,
 				CompressMinBytes: g.CompressMinBytes,
@@ -95,6 +96,7 @@ func (g *grpcHandler) NewConn(responseWriter http.ResponseWriter, request *http.
 				Ctx:             ctx,
 				Reader:          request.Body,
 				Codec:           cc,
+				CompressionName: requestCompression,
 				CompressionPool: g.CompressionPools.Get(requestCompression),
 				BufferPool:      g.BufferPool,
 				ReadMaxBytes:    g.ReadMaxBytes,

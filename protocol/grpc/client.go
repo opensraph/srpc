@@ -83,6 +83,7 @@ func (g *grpcClient) NewConn(ctx context.Context, spec protocol.Spec, header htt
 			EnvelopeWriter: envelope.EnvelopeWriter{
 				Ctx:              ctx,
 				Sender:           duplexCall,
+				CompressionName:  g.CompressionName,
 				CompressionPool:  g.CompressionPools.Get(g.CompressionName),
 				Codec:            g.Codec,
 				CompressMinBytes: g.CompressMinBytes,
@@ -92,11 +93,13 @@ func (g *grpcClient) NewConn(ctx context.Context, spec protocol.Spec, header htt
 		},
 		unmarshaler: grpcUnmarshaler{
 			EnvelopeReader: envelope.EnvelopeReader{
-				Ctx:          ctx,
-				Reader:       duplexCall,
-				Codec:        g.Codec,
-				BufferPool:   g.BufferPool,
-				ReadMaxBytes: g.ReadMaxBytes,
+				Ctx:             ctx,
+				Reader:          duplexCall,
+				Codec:           g.Codec,
+				BufferPool:      g.BufferPool,
+				ReadMaxBytes:    g.ReadMaxBytes,
+				CompressionName: g.CompressionName,
+				CompressionPool: g.CompressionPools.Get(g.CompressionName),
 			},
 		},
 		responseHeader:  make(http.Header),

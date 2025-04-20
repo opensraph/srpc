@@ -1,4 +1,4 @@
-module github.com/opensraph/srpc/examples/grpc/grpc-server
+module github.com/opensraph/srpc/examples/grpc-server
 
 go 1.24.1
 
