@@ -1,79 +1,79 @@
 # sRPC
 
-English | [中文](README_zh.md)
+[English](README.md) | 中文
 
-sRPC is a lightweight RPC framework that implements the Connect RPC protocol with gRPC-compatible interfaces. It seamlessly connects browsers and backend services using unified Protocol Buffer definitions.
+sRPC 是一个轻量级的 RPC 框架，使用与 gRPC 兼容的接口实现了 Connect RPC 协议。通过统一的 Protocol Buffer 定义，sRPC 实现了浏览器与后端服务的无缝连接。
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/opensraph/srpc.svg)](https://pkg.go.dev/github.com/opensraph/srpc)
 [![Go Report Card](https://goreportcard.com/badge/github.com/opensraph/srpc)](https://goreportcard.com/report/github.com/opensraph/srpc)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-## Overview
+## 概述
 
-sRPC combines the simplicity and browser compatibility of Connect with the robust interface design of gRPC. With a single API definition, you can build services that support both browser clients and native gRPC clients.
+sRPC 结合了 Connect 的简单易用性和浏览器兼容性，以及 gRPC 的强大接口设计。通过一个 API 定义，您可以构建同时支持浏览器客户端和 gRPC 原生客户端的服务。
 
-## Why sRPC?
+## 为什么使用 sRPC？
 
-Connect is an excellent choice for new projects due to its simplicity and browser compatibility. sRPC, however, focuses on compatibility, offering a seamless way for existing gRPC projects to support HTTP and web clients without significant code changes. With sRPC, you can:
+Connect 因其简单和浏览器兼容性是新项目的理想选择，而 sRPC 则专注于兼容性。它为现有 gRPC 项目提供了一种快速支持 HTTP 和 Web 客户端的方式，无需对现有代码进行大幅修改。使用 sRPC，您可以：
 
-- **Retain gRPC Compatibility**: Continue using your existing gRPC services and interfaces.
-- **Expand Client Support**: Enable HTTP and browser-based clients to interact with your services.
-- **Minimize Migration Effort**: Avoid rewriting or heavily modifying your existing gRPC code.
+- **保持 gRPC 兼容性**：继续使用现有的 gRPC 服务和接口。
+- **扩展客户端支持**：让 HTTP 和浏览器客户端也能与服务交互。
+- **减少迁移工作量**：避免重写或大幅修改现有 gRPC 代码。
 
-## Features
+## 功能
 
-- **Protocol Compatibility**: Implements the Connect RPC protocol, supporting browser and gRPC-compatible HTTP APIs.
-- **gRPC-Compatible Interface**: Provides the same API experience as gRPC for seamless transitions.
-- **Standard Library Compatibility**: Works with both Go's standard library and gRPC code.
-- **Lightweight Design**: Focuses on core functionality without unnecessary complexity.
-- **Full Streaming Support**: Supports unary calls, server streaming, client streaming, and bidirectional streaming.
-- **Interceptors and Middleware**: Offers a flexible request/response processing pipeline.
-- **Error Handling**: Structured error types compatible with Go's standard errors and gRPC status codes.
-- **Transport Agnostic**: Supports HTTP/1.1 and HTTP/2.
+- **协议兼容性**：实现 Connect RPC 协议，支持浏览器和 gRPC 兼容的 HTTP API。
+- **gRPC 接口兼容**：提供与 gRPC 相同的 API 体验，轻松过渡。
+- **标准库兼容**：与 Go 标准库和 gRPC 代码兼容。
+- **轻量设计**：专注核心功能，无多余复杂性。
+- **完整流支持**：支持单向调用、服务器流、客户端流和双向流。
+- **拦截器和中间件**：灵活的请求/响应处理管道。
+- **错误处理**：结构化错误类型，兼容 Go 标准错误和 gRPC 状态码。
+- **传输无关性**：支持 RPC、HTTP/1.1 和 HTTP/2。
 
-## Quick Start
+## 快速开始
 
-### Installation
+### 安装
 
 ```bash
 go get github.com/opensraph/srpc
 ```
 
-### Define Services
+### 定义服务
 
-Define your services using standard Protocol Buffers:
+使用标准的 Protocol Buffers 定义服务：
 
 ```protobuf
 syntax = "proto3";
 
 package srpc.examples.echo;
 
-// EchoRequest represents the echo request.
+// EchoRequest 是回显请求。
 message EchoRequest {
   string message = 1;
 }
 
-// EchoResponse represents the echo response.
+// EchoResponse 是回显响应。
 message EchoResponse {
   string message = 1;
 }
 
-// Echo defines the echo service.
+// Echo 是回显服务。
 service Echo {
-  // UnaryEcho is a unary echo.
+  // UnaryEcho 是单向回显。
   rpc UnaryEcho(EchoRequest) returns (EchoResponse) {}
-  // ServerStreamingEcho is server-side streaming.
+  // ServerStreamingEcho 是服务器流。
   rpc ServerStreamingEcho(EchoRequest) returns (stream EchoResponse) {}
-  // ClientStreamingEcho is client-side streaming.
+  // ClientStreamingEcho 是客户端流。
   rpc ClientStreamingEcho(stream EchoRequest) returns (EchoResponse) {}
-  // BidirectionalStreamingEcho is bidirectional streaming.
+  // BidirectionalStreamingEcho 是双向流。
   rpc BidirectionalStreamingEcho(stream EchoRequest) returns (stream EchoResponse) {}
 }
 ```
 
-### Server Implementation
+### 服务端实现
 
-sRPC's server API is fully compatible with gRPC, allowing seamless migration of existing gRPC services. Below is an example of a server implementation with authentication and logging interceptors:
+sRPC 的服务端 API 完全兼容 gRPC，允许现有 gRPC 服务的无缝迁移。以下是一个带有认证和日志拦截器的服务端实现示例：
 
 ```go
 package main
@@ -155,9 +155,9 @@ func main() {
 }
 ```
 
-### Client Usage
+### 客户端使用
 
-The client API is also gRPC-compatible while supporting standard library-style calling patterns. Below is an example of a client implementation with logging and token injection interceptors:
+客户端 API 同样兼容 gRPC，同时支持标准库风格的调用模式。以下是一个带有日志和令牌注入拦截器的客户端实现示例：
 
 ```go
 package main
@@ -245,9 +245,9 @@ func main() {
 }
 ```
 
-### Testing with cURL
+### 使用 cURL 测试
 
-You can test the `UnaryEcho` method of the sRPC server using `cURL`. Below is an example:
+您可以使用 `cURL` 测试 sRPC 服务器的 `UnaryEcho` 方法。以下是一个示例：
 
 ```bash
 curl \
@@ -257,13 +257,13 @@ curl \
     https://localhost:50051/grpc.examples.echo.Echo/UnaryEcho
 ```
 
-## Compatibility Design
+## 兼容性设计
 
-sRPC is carefully designed to be compatible with both Go's standard library and gRPC:
+sRPC 精心设计了与 Go 标准库和 gRPC 兼容的接口：
 
-### Standard Library Compatibility
+### 标准库兼容性
 
-- Error handling uses the standard `error` interface
+- 错误处理使用标准的 `error` 接口
 
 ```go
 package main
@@ -286,22 +286,22 @@ func main() {
 }
 ```
 
-### gRPC Compatibility
+### gRPC 兼容性
 
-- Provides the same registration interfaces as `grpc.ServiceRegistrar`
-- Uses the same service descriptor structures
+- 提供与 `grpc.ServiceRegistrar` 相同的注册接口
+- 使用相同的服务描述符结构
 
-## Examples
+## 示例
 
-The repository contains working examples that demonstrate various use cases:
+该仓库包含展示各种用例的工作示例：
 
-- [Basic Server](examples/grpc/grpc-server/main.go): A simple sRPC server implementation with authentication and logging interceptors. Demonstrates unary and bidirectional streaming RPCs, token validation, and TLS-based credentials.
-- [Basic Client](examples/grpc/grpc-client/main.go): A corresponding client implementation showcasing unary and bidirectional streaming RPC calls, logging and token injection interceptors, and TLS-based secure connections.
+- [基础服务端](examples/grpc/grpc-server/main.go) - 一个简单的 sRPC 服务端实现，带有认证和日志拦截器。服务端展示了单向和双向流 RPC、令牌验证以及基于 TLS 的凭据。
+- [基础客户端](examples/grpc/grpc-client/main.go) - 一个对应的客户端实现，展示了单向和双向流 RPC 调用、日志和令牌注入拦截器以及基于 TLS 的安全连接。
 
-## Contributing
+## 贡献
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+欢迎贡献！请随时提交 Pull Request。
 
-## License
+## 许可证
 
-This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for details.
+此项目根据 Apache License 2.0 许可 - 有关详细信息，请参阅 [LICENSE](LICENSE) 文件。
