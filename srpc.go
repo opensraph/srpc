@@ -135,10 +135,11 @@ func (hd handlerDescriptor) NewHandler() *Handler {
 
 	return &Handler{
 		ctx:              context.Background(),
+		desc:             hd,
+		opts:             hd.opts,
 		protocolHandlers: methodHandlers,
 		allowMethod:      allowMethodValue,
 		acceptPost:       acceptPostValue,
-		streamType:       hd.streamType,
 		implementation:   implementation,
 	}
 }
@@ -294,13 +295,13 @@ var _ http.Handler = (*Handler)(nil)
 
 // Handler is an HTTP handler that serves RPC requests.
 type Handler struct {
-	ctx              context.Context
+	ctx              context.Context                       // Context for the handler
+	desc             handlerDescriptor                     // desc contains the method description.
+	opts             serverOptions                         // Server options for configuring the handler
 	allowMethod      string                                // Allow header
 	acceptPost       string                                // Accept-Post header
 	protocolHandlers map[string][]protocol.ProtocolHandler // Method to protocol handlers
-
-	streamType     protocol.StreamType // desc contains the stream description.
-	implementation Implementation      // implementation is the function that implements the stream.
+	implementation   Implementation                        // implementation is the function that implements the stream.
 }
 
 // ServeHTTP implements [http.Handler].
@@ -309,7 +310,7 @@ func (h *Handler) ServeHTTP(responseWriter http.ResponseWriter, request *http.Re
 	// EOF: the stream we construct later on already does that, and we only
 	// return early when dealing with misbehaving clients. In those cases, it's
 	// okay if we can't re-use the connection.
-	isBidi := (h.streamType & protocol.StreamTypeBidi) == protocol.StreamTypeBidi
+	isBidi := (h.desc.streamType & protocol.StreamTypeBidi) == protocol.StreamTypeBidi
 	if isBidi && request.ProtoMajor < 2 {
 		// Clients coded to expect full-duplex connections may hang if they've
 		// mistakenly negotiated HTTP/1.1. To unblock them, we must close the

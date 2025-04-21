@@ -5,13 +5,10 @@ import (
 	"io"
 	"math"
 	"net/http"
-	"os"
-	"syscall"
 	"time"
 
 	"github.com/opensraph/srpc/compress"
 	"github.com/opensraph/srpc/encoding"
-	"github.com/opensraph/srpc/internal/stats"
 	"github.com/opensraph/srpc/mem"
 	"google.golang.org/grpc/credentials"
 
@@ -31,7 +28,7 @@ const (
 type ServerOption func(o *serverOptions)
 
 type serverOptions struct {
-	sigs                  []os.Signal
+	enableTracing         bool
 	readTimeout           time.Duration
 	writeTimeout          time.Duration
 	idleTimeout           time.Duration
@@ -39,23 +36,17 @@ type serverOptions struct {
 	maxReceiveMessageSize int
 	maxSendMessageSize    int
 	creds                 credentials.TransportCredentials
-
-	eventHandlers []stats.EventHandler
-
-	interceptor Interceptor
-
-	unknownHandler http.Handler
-
-	compressionNames []string
-	compressionPools map[string]*compress.CompressionPool
-	compressMinBytes int
-	codecs           encoding.ReadOnlyCodecs
-
-	bufferPool mem.BufferPool
+	interceptor           Interceptor
+	unknownHandler        http.Handler
+	compressionNames      []string
+	compressionPools      map[string]*compress.CompressionPool
+	compressMinBytes      int
+	codecs                encoding.ReadOnlyCodecs
+	bufferPool            mem.BufferPool
 }
 
 var defaultServerOptions = serverOptions{
-	sigs:                  []os.Signal{syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGINT},
+	enableTracing:         false,
 	maxConcurrentStreams:  defaultServerMaxConcurrentStreams,
 	maxReceiveMessageSize: defaultServerMaxReceiveMessageSize,
 	maxSendMessageSize:    defaultServerMaxSendMessageSize,
@@ -76,16 +67,28 @@ var globalServerOptions []ServerOption = []ServerOption{
 	),
 }
 
+// EnableTracing returns a ServerOption that enables tracing for the server.
+// This is useful for debugging and monitoring the server's performance.
+// If not set, tracing is disabled by default.
+func EnableTracing() ServerOption {
+	return func(o *serverOptions) {
+		o.enableTracing = true
+	}
+}
+
+// ReadTimeout returns a ServerOption that sets the read timeout for the server.
 func ReadTimeout(d time.Duration) ServerOption {
 	return func(o *serverOptions) { o.readTimeout = d }
 }
 
+// WriteTimeout returns a ServerOption that sets the write timeout for the server.
 func WriteTimeout(d time.Duration) ServerOption {
 	return func(o *serverOptions) {
 		o.writeTimeout = d
 	}
 }
 
+// IdleTimeout returns a ServerOption that sets the idle timeout for the server.
 func IdleTimeout(d time.Duration) ServerOption {
 	return func(o *serverOptions) {
 		o.idleTimeout = d
@@ -137,12 +140,7 @@ func UnknownHandler(h http.Handler) ServerOption {
 	}
 }
 
-func EventHandler(handlers ...stats.EventHandler) ServerOption {
-	return func(o *serverOptions) {
-		o.eventHandlers = append(o.eventHandlers, handlers...)
-	}
-}
-
+// Compression returns a ServerOption that sets the compression algorithm
 func Compression(name string, decompressor compress.Decompressor, compressor compress.Compressor) ServerOption {
 	return func(o *serverOptions) {
 		if o.compressionPools == nil {
@@ -167,6 +165,7 @@ func CompressionMinBytes(n int) ServerOption {
 	}
 }
 
+// Codec returns a ServerOption that sets the codecs for the server.
 func Codec(codecs ...encoding.Codec) ServerOption {
 	return func(o *serverOptions) {
 		if o.codecs == nil {

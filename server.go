@@ -19,8 +19,7 @@ import (
 )
 
 var (
-	EnableTracing    bool = true
-	ErrServerStopped      = errors.New("srpc: the server has been stopped")
+	ErrServerStopped = errors.New("srpc: the server has been stopped")
 )
 
 type Server interface {
@@ -81,13 +80,13 @@ func NewServer(opt ...ServerOption) *server {
 		done:     srpcsync.NewEvent(),
 	}
 
-	if EnableTracing {
+	if s.opts.enableTracing {
 		_, file, line, _ := runtime.Caller(1)
 		s.events = trace.NewEventLog("srpc.Server", fmt.Sprintf("%s:%d", file, line))
-		s.mux.Handle("/debug/event", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			trace.RenderEvents(w, r, true)
-		}))
-
+		s.mux.HandleFunc("/_srpc/event", trace.Events)
+		s.mux.HandleFunc("/_srpc/trace", trace.Traces)
+		s.opts.interceptor.ChainUnaryInterceptor(traceUnaryInterceptor())
+		s.opts.interceptor.ChainStreamInterceptor(traceStreamInterceptor())
 	}
 
 	return s

@@ -136,7 +136,12 @@ func main() {
 		log.Fatalf("failed to create credentials: %v", err)
 	}
 
-	s := srpc.NewServer(srpc.Creds(creds), srpc.UnaryInterceptor(unaryInterceptor), srpc.StreamInterceptor(streamInterceptor))
+	s := srpc.NewServer(
+		srpc.Creds(creds),
+		srpc.UnaryInterceptor(unaryInterceptor),
+		srpc.StreamInterceptor(streamInterceptor),
+		srpc.EnableTracing(),
+	)
 
 	// Register EchoServer on the server.
 	pb.RegisterEchoServer(s, &server{})
