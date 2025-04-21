@@ -1,11 +1,7 @@
 version: v2
-modules:
-  - path: ./
-deps:
-  - buf.build/googleapis/googleapis
 lint:
-  ignore:
-    - ./echo.proto
+  use:
+    - STANDARD
 breaking:
   use:
     - FILE

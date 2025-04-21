@@ -16,7 +16,7 @@ import (
 	"golang.org/x/net/http2"
 	"google.golang.org/protobuf/encoding/protojson"
 
-	pb "github.com/opensraph/srpc/examples/proto/echo"
+	pb "github.com/opensraph/srpc/examples/proto/gen/srpc/echo/v1"
 )
 
 var (

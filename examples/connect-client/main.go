@@ -14,8 +14,8 @@ import (
 	"golang.org/x/net/http2"
 
 	"connectrpc.com/connect"
-	pb "github.com/opensraph/srpc/examples/proto/echo"
-	echov1connect "github.com/opensraph/srpc/examples/proto/echo/echoconnect"
+	pb "github.com/opensraph/srpc/examples/proto/gen/srpc/echo/v1"
+	echov1connect "github.com/opensraph/srpc/examples/proto/gen/srpc/echo/v1/echov1connect"
 )
 
 var (
