@@ -3,9 +3,9 @@ package srpc
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
+	"os"
 	"reflect"
 	"runtime"
 	"sync"
@@ -90,10 +90,6 @@ func NewServer(opt ...ServerOption) *server {
 
 	}
 
-	if s.opts.numServerWorkers > 0 {
-		s.initServerWorkers()
-	}
-
 	return s
 }
 
@@ -110,8 +106,8 @@ func (s *server) Serve(lis net.Listener) error {
 	}
 
 	for _, srv := range s.services {
-		procedure := "/" + srv.ServiceName + "/"
-		s.Handle(procedure, srv.NewHandler(s.opts))
+		procedure := "/" + srv.serviceName + "/"
+		s.Handle(procedure, srv.NewHandler())
 	}
 
 	s.serveWG.Add(1)
@@ -188,14 +184,6 @@ func (s *server) stop(graceful bool) {
 		s.srv.Close()
 	}
 
-	if s.opts.numServerWorkers > 0 {
-		// Closing the channel (only once, via sync.OnceFunc) after all the
-		// connections have been closed above ensures that there are no
-		// goroutines executing the callback passed to st.HandleStreams (where
-		// the channel is written to).
-		s.serverWorkerChannelClose()
-	}
-
 	if s.events != nil {
 		s.events.Finish()
 		s.events = nil
@@ -232,13 +220,19 @@ func (s *server) register(sd *grpc.ServiceDesc, ss any) {
 	defer s.mu.Unlock()
 	s.printf("RegisterService(%q)", sd.ServiceName)
 	if s.serve {
-		log.Fatalf("srpc: Server.RegisterService after Server.Serve for %q", sd.ServiceName)
+		s.errorf("srpc: Server.RegisterService called after Server.Serve for %q", sd.ServiceName)
+		os.Exit(1)
 	}
 	if _, ok := s.services[sd.ServiceName]; ok {
-		log.Fatalf("srpc: Server.RegisterService found duplicate service registration for %q", sd.ServiceName)
+		s.errorf("srpc: Server.RegisterService found duplicate service registration for %q", sd.ServiceName)
+		os.Exit(1)
 	}
 
-	serviceDesc := newServiceDescriptor(sd, ss)
+	serviceDesc, err := newServiceDescriptor(sd, ss, s.opts)
+	if err != nil {
+		s.errorf("srpc: Server.RegisterService failed to create service descriptor for %q: %v", sd.ServiceName, err)
+		os.Exit(1)
+	}
 
 	s.services[sd.ServiceName] = serviceDesc
 }
@@ -256,41 +250,5 @@ func (s *server) printf(format string, a ...any) {
 func (s *server) errorf(format string, a ...any) {
 	if s.events != nil {
 		s.events.Errorf(format, a...)
-	}
-}
-
-// serverWorkerResetThreshold defines how often the stack must be reset. Every
-// N requests, by spawning a new goroutine in its place, a worker can reset its
-// stack so that large stacks don't live in memory forever. 2^16 should allow
-// each goroutine stack to live for at least a few seconds in a typical
-// workload (assuming a QPS of a few thousand requests/sec).
-const serverWorkerResetThreshold = 1 << 16
-
-// serverWorker blocks on a *transport.ServerStream channel forever and waits
-// for data to be fed by serveStreams. This allows multiple requests to be
-// processed by the same goroutine, removing the need for expensive stack
-// re-allocations (see the runtime.morestack problem [1]).
-//
-// [1] https://github.com/golang/go/issues/18138
-func (s *server) serverWorker() {
-	for completed := 0; completed < serverWorkerResetThreshold; completed++ {
-		f, ok := <-s.serverWorkerChannel
-		if !ok {
-			return
-		}
-		f()
-	}
-	go s.serverWorker()
-}
-
-// initServerWorkers creates worker goroutines and a channel to process incoming
-// connections to reduce the time spent overall on runtime.morestack.
-func (s *server) initServerWorkers() {
-	s.serverWorkerChannel = make(chan func())
-	s.serverWorkerChannelClose = sync.OnceFunc(func() {
-		close(s.serverWorkerChannel)
-	})
-	for i := uint32(0); i < s.opts.numServerWorkers; i++ {
-		go s.serverWorker()
 	}
 }

@@ -40,8 +40,6 @@ type serverOptions struct {
 	maxSendMessageSize    int
 	creds                 credentials.TransportCredentials
 
-	numServerWorkers uint32
-
 	eventHandlers []stats.EventHandler
 
 	interceptor Interceptor
@@ -61,12 +59,12 @@ var defaultServerOptions = serverOptions{
 	maxConcurrentStreams:  defaultServerMaxConcurrentStreams,
 	maxReceiveMessageSize: defaultServerMaxReceiveMessageSize,
 	maxSendMessageSize:    defaultServerMaxSendMessageSize,
-
-	bufferPool: mem.DefaultBufferPool(),
+	bufferPool:            mem.DefaultBufferPool(),
 	interceptor: Interceptor{
 		chainUnaryServerInts:  make([]UnaryServerInterceptor, 0),
 		chainStreamServerInts: make([]StreamServerInterceptor, 0),
 	},
+	unknownHandler: http.NotFoundHandler(),
 }
 
 var globalServerOptions []ServerOption = []ServerOption{
@@ -125,13 +123,6 @@ func MaxSendMsgSize(n int) ServerOption {
 func Creds(c credentials.TransportCredentials) ServerOption {
 	return func(o *serverOptions) {
 		o.creds = c
-	}
-}
-
-// NumServerWorkers returns a ServerOption that sets the number of server workers.
-func NumServerWorkers(n uint32) ServerOption {
-	return func(o *serverOptions) {
-		o.numServerWorkers = n
 	}
 }
 
