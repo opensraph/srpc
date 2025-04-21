@@ -12,8 +12,7 @@ func traceUnaryInterceptor() UnaryServerInterceptor {
 		tr := trace.New("srpc.unary", info.FullMethod)
 		defer tr.Finish()
 
-		tr.LazyPrintf("Request: %v", req)
-
+		tr.LazyPrintf("Request: %T", req)
 		ctx = trace.NewContext(ctx, tr)
 		// Call the handler
 		resp, err = handler(ctx, req)
@@ -21,8 +20,7 @@ func traceUnaryInterceptor() UnaryServerInterceptor {
 			tr.LazyPrintf("%s", err)
 			tr.SetError()
 		}
-		tr.LazyPrintf("Response: %v", resp)
-
+		tr.LazyPrintf("Response: %T", resp)
 		return resp, err
 	}
 }
