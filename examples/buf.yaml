@@ -1,7 +1,9 @@
 version: v2
+modules:
+  - path: proto
 lint:
   use:
     - MINIMAL
 breaking:
   use:
-    - FILE
+    - WIRE_JSON

@@ -47,7 +47,7 @@ func init() {
 // defaultConnectUserAgent returns a User-Agent string similar to those used in gRPC.
 //
 //nolint:gochecknoglobals
-var defaultConnectUserAgent = fmt.Sprintf("connect-go/%s (%s)", version.Version, runtime.Version())
+var defaultConnectUserAgent = fmt.Sprintf("srpc-go/%s (%s)", version.Version, runtime.Version())
 
 var _ protocol.Protocol = (*protocolConnect)(nil)
 
