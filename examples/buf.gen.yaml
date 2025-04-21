@@ -1,18 +1,17 @@
 version: v2
 managed:
   enabled: true
-  disable:
-    - module: buf.build/googleapis/googleapis
   override:
     - file_option: go_package_prefix
-      value: github.com/opensraph/srpc/examples/proto/echo
+      value: github.com/opensraph/srpc/examples/proto/gen
 plugins:
   - remote: buf.build/protocolbuffers/go
-    out: ./echo
+    out: ./proto/gen
     opt: paths=source_relative
   - remote: buf.build/grpc/go
-    out: ./echo
+    out: ./proto/gen
     opt: paths=source_relative
   - remote: buf.build/connectrpc/go
-    out: ./echo
+    out: ./proto/gen
     opt: paths=source_relative
+clean: true

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/opensraph/srpc"
-	ecpb "github.com/opensraph/srpc/examples/proto/echo"
+	ecpb "github.com/opensraph/srpc/examples/proto/gen/srpc/echo/v1"
 	"golang.org/x/oauth2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"

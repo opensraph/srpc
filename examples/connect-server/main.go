@@ -18,9 +18,9 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	echov1connect "github.com/opensraph/srpc/examples/proto/echo/echoconnect"
+	echov1connect "github.com/opensraph/srpc/examples/proto/gen/srpc/echo/v1/echov1connect"
 
-	pb "github.com/opensraph/srpc/examples/proto/echo"
+	pb "github.com/opensraph/srpc/examples/proto/gen/srpc/echo/v1"
 )
 
 var (
@@ -49,16 +49,7 @@ var _ echov1connect.EchoHandler = (*server)(nil)
 
 // Define server struct
 type server struct {
-}
-
-// ClientStreamingEcho implements echoconnect.EchoHandler
-func (s *server) ClientStreamingEcho(context.Context, *connect.ClientStream[pb.EchoRequest]) (*connect.Response[pb.EchoResponse], error) {
-	panic("unimplemented")
-}
-
-// ServerStreamingEcho implements echoconnect.EchoHandler
-func (s *server) ServerStreamingEcho(context.Context, *connect.Request[pb.EchoRequest], *connect.ServerStream[pb.EchoResponse]) error {
-	panic("unimplemented")
+	echov1connect.UnimplementedEchoHandler
 }
 
 // Implement unary call interface

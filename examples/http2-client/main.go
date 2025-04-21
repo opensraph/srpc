@@ -16,13 +16,13 @@ import (
 	"golang.org/x/net/http2"
 	"google.golang.org/protobuf/encoding/protojson"
 
-	pb "github.com/opensraph/srpc/examples/proto/echo"
+	pb "github.com/opensraph/srpc/examples/proto/gen/srpc/echo/v1"
 )
 
 var (
 	serverAddr  = flag.String("server_addr", "https://localhost:50051", "The server address in the format of scheme://host:port")
 	authToken   = flag.String("auth_token", "some-secret-token", "Authorization token")
-	serviceName = "srpc.examples.echo.Echo"
+	serviceName = "srpc.echo.v1.Echo"
 )
 
 // HTTP/2 client

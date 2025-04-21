@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"reflect"
 	"runtime"
 	"sync"
 
 	"github.com/opensraph/srpc/errors"
 	"github.com/opensraph/srpc/internal/srpcsync"
-	"github.com/opensraph/srpc/protocol"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 	"golang.org/x/net/trace"
@@ -19,8 +19,7 @@ import (
 )
 
 var (
-	EnableTracing    bool = true
-	ErrServerStopped      = errors.New("srpc: the server has been stopped")
+	ErrServerStopped = errors.New("srpc: the server has been stopped")
 )
 
 type Server interface {
@@ -34,14 +33,14 @@ type Server interface {
 var _ Server = (*server)(nil)
 
 type server struct {
-	opts    serverOptions
-	mux     *http.ServeMux
-	srv     *http.Server
-	lis     map[net.Listener]bool
-	serve   bool
-	streams map[string]StreamDesc
-	mu      sync.Mutex
-	events  trace.EventLog
+	opts     serverOptions
+	mux      *http.ServeMux
+	srv      *http.Server
+	lis      map[net.Listener]bool
+	serve    bool
+	services map[string]*serviceDescriptor // service name -> service info
+	mu       sync.Mutex
+	events   trace.EventLog
 
 	quit    *srpcsync.Event
 	done    *srpcsync.Event
@@ -72,26 +71,22 @@ func NewServer(opt ...ServerOption) *server {
 	}
 
 	s := &server{
-		lis:     make(map[net.Listener]bool),
-		opts:    opts,
-		mux:     mux,
-		srv:     http1Server,
-		streams: make(map[string]StreamDesc),
-		quit:    srpcsync.NewEvent(),
-		done:    srpcsync.NewEvent(),
+		lis:      make(map[net.Listener]bool),
+		opts:     opts,
+		mux:      mux,
+		srv:      http1Server,
+		services: make(map[string]*serviceDescriptor),
+		quit:     srpcsync.NewEvent(),
+		done:     srpcsync.NewEvent(),
 	}
 
-	if EnableTracing {
+	if s.opts.enableTracing {
 		_, file, line, _ := runtime.Caller(1)
 		s.events = trace.NewEventLog("srpc.Server", fmt.Sprintf("%s:%d", file, line))
-		s.mux.Handle("/debug/event", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			trace.RenderEvents(w, r, true)
-		}))
-
-	}
-
-	if s.opts.numServerWorkers > 0 {
-		s.initServerWorkers()
+		s.mux.HandleFunc("/_srpc/event", trace.Events)
+		s.mux.HandleFunc("/_srpc/trace", trace.Traces)
+		s.opts.interceptor.ChainUnaryInterceptor(traceUnaryInterceptor())
+		s.opts.interceptor.ChainStreamInterceptor(traceStreamInterceptor())
 	}
 
 	return s
@@ -109,9 +104,9 @@ func (s *server) Serve(lis net.Listener) error {
 		return ErrServerStopped
 	}
 
-	for procedure, desc := range s.streams {
-		handler := s.newHandler(desc)
-		s.Handle(procedure, handler)
+	for _, srv := range s.services {
+		procedure := "/" + srv.serviceName + "/"
+		s.Handle(procedure, srv.NewHandler())
 	}
 
 	s.serveWG.Add(1)
@@ -188,14 +183,6 @@ func (s *server) stop(graceful bool) {
 		s.srv.Close()
 	}
 
-	if s.opts.numServerWorkers > 0 {
-		// Closing the channel (only once, via sync.OnceFunc) after all the
-		// connections have been closed above ensures that there are no
-		// goroutines executing the callback passed to st.HandleStreams (where
-		// the channel is written to).
-		s.serverWorkerChannelClose()
-	}
-
 	if s.events != nil {
 		s.events.Finish()
 		s.events = nil
@@ -230,121 +217,23 @@ func (s *server) RegisterService(sd *grpc.ServiceDesc, ss any) {
 func (s *server) register(sd *grpc.ServiceDesc, ss any) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.printf("RegisterService: %s", sd.ServiceName)
+	s.printf("RegisterService(%q)", sd.ServiceName)
 	if s.serve {
-		panic(fmt.Errorf("RegisterService after Serve: %s", sd.ServiceName))
+		s.errorf("srpc: Server.RegisterService called after Server.Serve for %q", sd.ServiceName)
+		os.Exit(1)
 	}
-	for i := range sd.Methods {
-		d := &sd.Methods[i]
-		procedure := s.checkAndGetProcedure(sd.ServiceName, d.MethodName)
-		desc := StreamDesc{
-			ServiceImpl:      ss,
-			ServiceName:      sd.ServiceName,
-			MethodName:       d.MethodName,
-			StreamType:       StreamTypeUnary,
-			Handler:          d.Handler,
-			IsClient:         false,
-			IdempotencyLevel: IdempotencyNoSideEffects,
-		}
-		s.streams[procedure] = desc
+	if _, ok := s.services[sd.ServiceName]; ok {
+		s.errorf("srpc: Server.RegisterService found duplicate service registration for %q", sd.ServiceName)
+		os.Exit(1)
 	}
 
-	for i := range sd.Streams {
-		d := &sd.Streams[i]
-		procedure := s.checkAndGetProcedure(sd.ServiceName, d.StreamName)
-		desc := StreamDesc{
-			ServiceName:      sd.ServiceName,
-			MethodName:       d.StreamName,
-			ServiceImpl:      ss,
-			StreamType:       parseGrpcStreamType(d),
-			Handler:          d.Handler,
-			IsClient:         false,
-			IdempotencyLevel: IdempotencyUnknown,
-		}
-		s.streams[procedure] = desc
+	serviceDesc, err := newServiceDescriptor(sd, ss, s.opts)
+	if err != nil {
+		s.errorf("srpc: Server.RegisterService failed to create service descriptor for %q: %v", sd.ServiceName, err)
+		os.Exit(1)
 	}
-}
 
-func (s *server) checkAndGetProcedure(serviceName, methodName string) string {
-	procedure := fmt.Sprintf("/%s/%s", serviceName, methodName)
-	if _, ok := s.streams[procedure]; ok {
-		panic(fmt.Errorf("RegisterService duplicate procedure: %s", procedure))
-	}
-	return procedure
-}
-
-func (s *server) newHandler(desc StreamDesc, handlerOpts ...HandlerOption) *Handler {
-	o := newHandlerOption(desc, s.opts, handlerOpts)
-	handlers := o.newProtocolHandlers()
-	methodHandlers := mappedMethodHandlers(handlers)
-	allowMethodValue := sortedAllowMethodValue(handlers)
-	acceptPostValue := sortedAcceptPostValue(handlers)
-
-	implementation := s.newImplementation(desc, handlerOpts)
-
-	return &Handler{
-		ctx:  context.Background(),
-		opts: o,
-
-		protocolHandlers: methodHandlers,
-		allowMethod:      allowMethodValue,
-		acceptPost:       acceptPostValue,
-
-		desc:           desc,
-		implementation: implementation,
-	}
-}
-
-type Implementation func(ctx context.Context, stream protocol.StreamingHandlerConn) error
-
-func (s *server) newImplementation(desc StreamDesc, handlerOpts []HandlerOption) Implementation {
-	return func(ctx context.Context, conn protocol.StreamingHandlerConn) error {
-		switch desc.StreamType {
-		case StreamTypeUnary:
-			return s.unaryImplementation(desc, handlerOpts)(ctx, conn)
-		case StreamTypeClient, StreamTypeServer, StreamTypeBidi:
-			return s.streamImplementation(desc, handlerOpts)(ctx, conn)
-		default:
-			panic(errors.Newf("invalid stream type: %v", desc.StreamType))
-		}
-	}
-}
-
-func (s *server) unaryImplementation(desc StreamDesc, handlerOpts []HandlerOption) Implementation {
-	return func(ctx context.Context, coon protocol.StreamingHandlerConn) error {
-		handler, ok := desc.Handler.(grpc.MethodHandler)
-		if !ok {
-			panic(errors.Newf("invalid unary handler type: %T", desc.Handler))
-		}
-		response, err := handler(desc.ServiceImpl, ctx, coon.Receive, s.opts.interceptor.UnaryInterceptor())
-		if err != nil {
-			return err
-		}
-		return coon.Send(response)
-	}
-}
-
-func (s *server) streamImplementation(desc StreamDesc, handlerOpts []HandlerOption) Implementation {
-	return func(ctx context.Context, conn protocol.StreamingHandlerConn) error {
-		handler, ok := desc.Handler.(grpc.StreamHandler)
-		if !ok {
-			return errors.Newf("invalid stream handler type: %T", desc.Handler)
-		}
-
-		streamInfo := &grpc.StreamServerInfo{
-			FullMethod:     fmt.Sprintf("/%s/%s", desc.ServiceName, desc.MethodName),
-			IsClientStream: desc.StreamType.IsClient(),
-			IsServerStream: desc.StreamType.IsServer(),
-		}
-
-		// Apply stream interceptor if available
-		if interceptor := s.opts.interceptor.StreamInterceptor(); interceptor != nil {
-			return interceptor(desc.ServiceImpl, newGRPCServerStreamBridge(ctx, conn), streamInfo, handler)
-		}
-
-		// Directly invoke the handler if no interceptor is present
-		return handler(desc.ServiceImpl, newGRPCServerStreamBridge(ctx, conn))
-	}
+	s.services[sd.ServiceName] = serviceDesc
 }
 
 // printf records an event in s's event log, unless s has been stopped.
@@ -360,41 +249,5 @@ func (s *server) printf(format string, a ...any) {
 func (s *server) errorf(format string, a ...any) {
 	if s.events != nil {
 		s.events.Errorf(format, a...)
-	}
-}
-
-// serverWorkerResetThreshold defines how often the stack must be reset. Every
-// N requests, by spawning a new goroutine in its place, a worker can reset its
-// stack so that large stacks don't live in memory forever. 2^16 should allow
-// each goroutine stack to live for at least a few seconds in a typical
-// workload (assuming a QPS of a few thousand requests/sec).
-const serverWorkerResetThreshold = 1 << 16
-
-// serverWorker blocks on a *transport.ServerStream channel forever and waits
-// for data to be fed by serveStreams. This allows multiple requests to be
-// processed by the same goroutine, removing the need for expensive stack
-// re-allocations (see the runtime.morestack problem [1]).
-//
-// [1] https://github.com/golang/go/issues/18138
-func (s *server) serverWorker() {
-	for completed := 0; completed < serverWorkerResetThreshold; completed++ {
-		f, ok := <-s.serverWorkerChannel
-		if !ok {
-			return
-		}
-		f()
-	}
-	go s.serverWorker()
-}
-
-// initServerWorkers creates worker goroutines and a channel to process incoming
-// connections to reduce the time spent overall on runtime.morestack.
-func (s *server) initServerWorkers() {
-	s.serverWorkerChannel = make(chan func())
-	s.serverWorkerChannelClose = sync.OnceFunc(func() {
-		close(s.serverWorkerChannel)
-	})
-	for i := uint32(0); i < s.opts.numServerWorkers; i++ {
-		go s.serverWorker()
 	}
 }

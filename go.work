@@ -2,10 +2,5 @@ go 1.24.1
 
 use (
 	.
-	./examples/connect-client
-	./examples/connect-server
-	./examples/grpc-client
-	./examples/grpc-server
-	./examples/http2-client
-	./examples/proto
+	./examples
 )

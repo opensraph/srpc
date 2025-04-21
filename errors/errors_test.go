@@ -7,8 +7,6 @@ import (
 	"github.com/opensraph/srpc/errors"
 )
 
-const errorFormat = "error: code = %d desc = %s"
-
 func TestNewEqual(t *testing.T) {
 	// Different allocations should not be equal.
 	if errors.New("abc") == errors.New("abc") {
@@ -27,7 +25,7 @@ func TestNewEqual(t *testing.T) {
 
 func TestErrorMethod(t *testing.T) {
 	err := errors.New("abc")
-	want := fmt.Sprintf(errorFormat, errors.Unknown, "abc")
+	want := fmt.Sprintf("abc")
 	if err.Error() != want {
 		t.Errorf(`New("abc").Error() = %q, want %q`, err.Error(), want)
 	}

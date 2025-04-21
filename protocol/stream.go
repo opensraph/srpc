@@ -75,3 +75,11 @@ func (s StreamType) String() string {
 	}
 	return fmt.Sprintf("stream_%d", s)
 }
+
+func (s StreamType) IsClient() bool {
+	return s == StreamTypeClient || s == StreamTypeBidi
+}
+
+func (s StreamType) IsServer() bool {
+	return s == StreamTypeServer || s == StreamTypeBidi
+}
