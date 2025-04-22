@@ -295,8 +295,8 @@ func main() {
 
 The repository contains working examples that demonstrate various use cases:
 
-- [Basic Server](examples/grpc/grpc-server/main.go): A simple sRPC server implementation with authentication and logging interceptors. Demonstrates unary and bidirectional streaming RPCs, token validation, and TLS-based credentials.
-- [Basic Client](examples/grpc/grpc-client/main.go): A corresponding client implementation showcasing unary and bidirectional streaming RPC calls, logging and token injection interceptors, and TLS-based secure connections.
+- [Basic Server](examples/srpc-server/main.go): A simple sRPC server implementation with authentication and logging interceptors. Demonstrates unary and bidirectional streaming RPCs, token validation, and TLS-based credentials.
+- [Basic Client](examples/srpc-client/main.go): A corresponding client implementation showcasing unary and bidirectional streaming RPC calls, logging and token injection interceptors, and TLS-based secure connections.
 
 ## Contributing
 

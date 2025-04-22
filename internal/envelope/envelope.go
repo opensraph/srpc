@@ -158,19 +158,20 @@ func (w *EnvelopeWriter) Write(env *Envelope) error {
 		}
 		return w.write(env)
 	}
-	data, err := w.CompressionPool.Compress(env.Data)
+	compData, isCompressed, err := compress.Compress(env.Data, w.CompressionPool, w.BufferPool)
 	if err != nil {
 		return err
 	}
-	if w.SendMaxBytes > 0 && data.Len() > w.SendMaxBytes {
+	if isCompressed {
+		env.Flags |= flagEnvelopeCompressed
+		env.Data = compData
+	}
+	if w.SendMaxBytes > 0 && env.Data.Len() > w.SendMaxBytes {
 		return errors.Newf(
-			"[envelope] compressed message size %d exceeds sendMaxBytes %d", data.Len(), w.SendMaxBytes,
+			"[envelope] compressed message size %d exceeds sendMaxBytes %d", env.Data.Len(), w.SendMaxBytes,
 		).WithCode(errors.ResourceExhausted)
 	}
-	return w.write(&Envelope{
-		Data:  data,
-		Flags: env.Flags | flagEnvelopeCompressed,
-	})
+	return w.write(env)
 }
 
 // Helper to write envelope
@@ -208,8 +209,8 @@ type EnvelopeReader struct {
 
 // Unmarshal reads an Envelope, decompresses its data if necessary, and unmarshal it.
 func (r *EnvelopeReader) Unmarshal(message any) error {
-	var buffer mem.BufferSlice
-	env := &Envelope{Data: buffer}
+	env := &Envelope{}
+	defer env.Data.Free()
 	err := r.Read(env)
 	switch {
 	case err == nil && env.IsSet(flagEnvelopeCompressed) && r.CompressionPool == nil:
@@ -232,10 +233,14 @@ func (r *EnvelopeReader) Unmarshal(message any) error {
 
 	data := env.Data
 	if data.Len() > 0 && env.IsSet(flagEnvelopeCompressed) {
-		decompressed, err := r.CompressionPool.Decompress(data, int64(r.ReadMaxBytes))
-		defer decompressed.Free()
+		decompressed, isDecompressed, err := compress.Decompress(data, r.ReadMaxBytes, r.CompressionPool, r.BufferPool)
 		if err != nil {
-			return err
+			return errors.Newf("[envelope] decompress message: %w", err).WithCode(errors.Internal)
+		}
+		if isDecompressed {
+			defer data.Free()
+			env.Flags &^= flagEnvelopeCompressed
+
 		}
 		data = decompressed
 	}

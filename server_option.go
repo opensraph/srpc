@@ -147,7 +147,7 @@ func Compression(name string, decompressor compress.Decompressor, compressor com
 			o.compressionPools = make(map[string]*compress.CompressionPool)
 		}
 		o.compressionNames = append(o.compressionNames, name)
-		o.compressionPools[name] = compress.NewCompressionPool(compressor, decompressor, mem.DefaultBufferPool())
+		o.compressionPools[name] = compress.NewCompressionPool(compressor, decompressor)
 	}
 }
 

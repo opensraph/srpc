@@ -3,7 +3,6 @@ package compress
 import (
 	"io"
 	"math"
-	"net/http"
 	"strings"
 	"sync"
 
@@ -45,133 +44,51 @@ type Compressor interface {
 }
 
 type CompressionPool struct {
-	bufferPool    mem.BufferPool
-	decompressors sync.Pool
-	compressors   sync.Pool
+	poolCompressor   sync.Pool
+	poolDecompressor sync.Pool
 }
 
-func NewCompressionPool(compressor Compressor, decompressor Decompressor, bufferPool mem.BufferPool) *CompressionPool {
-	if decompressor == nil || compressor == nil {
-		return nil
-	}
+func NewCompressionPool(compressor Compressor, decompressor Decompressor) *CompressionPool {
 	return &CompressionPool{
-		bufferPool: bufferPool,
-		decompressors: sync.Pool{
-			New: func() any { return decompressor },
+		poolCompressor: sync.Pool{
+			New: func() any {
+				return compressor
+			},
 		},
-		compressors: sync.Pool{
-			New: func() any { return compressor },
+		poolDecompressor: sync.Pool{
+			New: func() any {
+				return decompressor
+			},
 		},
 	}
 }
 
-func (c *CompressionPool) Decompress(src mem.BufferSlice, readMaxBytes int64) (mem.BufferSlice, error) {
-	decompressor, err := c.getDecompressor(src.Reader())
-	if err != nil && err != io.EOF {
-		return nil, errors.Newf("get decompressor: %w", err).WithCode(errors.Unknown)
-	}
-	reader := io.Reader(decompressor)
-	if readMaxBytes > 0 && readMaxBytes < math.MaxInt64 {
-		reader = io.LimitReader(decompressor, readMaxBytes+1)
-	}
-
-	var dst mem.BufferSlice
-	w := mem.NewWriter(&dst, c.bufferPool)
-	wrapErr := func(err error) error {
-		dst.Free()
-		err = errors.FromContextError(err)
-		if ok := errors.As(err, new(*errors.Error)); ok {
-			return err
-		}
-		return errors.Newf("error while decompress: %w", err).WithCode(errors.Internal)
-	}
-	written, err := io.Copy(w, reader)
-	if err != nil {
-		return nil, wrapErr(err)
-	}
-
-	if readMaxBytes > 0 && written > readMaxBytes {
-		_ = c.putDecompressor(decompressor)
-		return nil, wrapErr(errors.Newf(
-			"message size %d is larger than configured max %d",
-			written, readMaxBytes,
-		).WithCode(errors.ResourceExhausted))
-	}
-
-	if err := c.putDecompressor(decompressor); err != nil {
-		return nil, wrapErr(errors.Newf(
-			"recycle decompressor: %w", err,
-		).WithCode(errors.Unknown))
-	}
-	return dst, nil
+type reader struct {
+	Decompressor
+	pool *sync.Pool
 }
 
-func (c *CompressionPool) Compress(src mem.BufferSlice) (mem.BufferSlice, error) {
-	var dst mem.BufferSlice
-	writer := mem.NewWriter(&dst, c.bufferPool)
-
-	wrapErr := func(err error) error {
-		dst.Free()
-		err = errors.FromContextError(err)
-		if ok := errors.As(err, new(*errors.Error)); ok {
-			return err
-		}
-		return errors.Newf("error while compress: %w", err).WithCode(errors.Internal)
+func (c *CompressionPool) Decompress(r io.Reader) (io.Reader, error) {
+	z, inPool := c.poolDecompressor.Get().(Decompressor)
+	if !inPool {
+		return nil, errors.Newf("failed to get decompressor from pool")
 	}
-
-	compressor, err := c.getCompressor(writer)
-	if err != nil {
-		return nil, wrapErr(errors.Newf("get compressor: %w", err).WithCode(errors.Unknown))
+	if err := z.Reset(r); err != nil {
+		c.poolDecompressor.Put(z)
+		return nil, err
 	}
-	if _, err := io.Copy(compressor, src.Reader()); err != nil {
-		_ = c.putCompressor(compressor)
-		return nil, wrapErr(errors.Newf("compress: %w", err).WithCode(errors.Internal))
-	}
-	if err := c.putCompressor(compressor); err != nil {
-		return nil, wrapErr(errors.Newf("recycle compressor: %w", err).WithCode(errors.Internal))
-	}
-	return dst, nil
+	return z, nil
 }
 
-func (c *CompressionPool) getDecompressor(reader io.Reader) (Decompressor, error) {
-	decompressor, ok := c.decompressors.Get().(Decompressor)
-	if !ok {
-		return nil, errors.New("expected Decompressor, got incorrect type from pool")
-	}
-	return decompressor, decompressor.Reset(reader)
+type writer struct {
+	Compressor
+	pool *sync.Pool
 }
 
-func (c *CompressionPool) putDecompressor(decompressor Decompressor) error {
-	if err := decompressor.Close(); err != nil {
-		return err
-	}
-	// While it's in the pool, we don't want the decompressor to retain a
-	// reference to the underlying reader. However, most decompressors attempt to
-	// read some header data from the new data source when Reset; since we don't
-	// know the compression format, we can't provide a valid header. Since we
-	// also reset the decompressor when it's pulled out of the pool, we can
-	// ignore errors here.
-	_ = decompressor.Reset(http.NoBody)
-	c.decompressors.Put(decompressor)
-	return nil
-}
-
-func (c *CompressionPool) getCompressor(writer io.Writer) (Compressor, error) {
-	compressor, ok := c.compressors.Get().(Compressor)
-	if !ok {
-		return nil, errors.New("expected Compressor, got incorrect type from pool")
-	}
-	compressor.Reset(writer)
-	return compressor, nil
-}
-
-func (c *CompressionPool) putCompressor(compressor Compressor) error {
-	if err := compressor.Close(); err != nil {
-		return err
-	}
-	compressor.Reset(io.Discard) // don't keep references
-	c.compressors.Put(compressor)
-	return nil
+func (c *CompressionPool) Compress(w io.Writer) (io.WriteCloser, error) {
+	z := c.poolCompressor.Get().(*writer)
+	z.Reset(w)
+	return z, nil
 }
 
 // NegotiateCompression determines and validates the request compression and
@@ -274,4 +191,56 @@ func (m *namedCompressionPools) CommaSeparatedNames() string {
 
 func isCommaOrSpace(c rune) bool {
 	return c == ',' || c == ' '
+}
+
+func Compress(in mem.BufferSlice, compressor *CompressionPool, pool mem.BufferPool) (out mem.BufferSlice, isCompressed bool, err error) {
+	if compressor == nil || in.Len() == 0 {
+		return nil, false, nil
+	}
+	w := mem.NewWriter(&out, pool)
+	wrapErr := func(err error) error {
+		out.Free()
+		return errors.Newf("srpc: error while compressing: %v", err.Error()).WithCode(errors.Internal)
+	}
+	z, err := compressor.Compress(w)
+	if err != nil {
+		return nil, false, wrapErr(err)
+	}
+	for _, b := range in {
+		if _, err := z.Write(b.ReadOnlyData()); err != nil {
+			return nil, false, wrapErr(err)
+		}
+	}
+	if err := z.Close(); err != nil {
+		return nil, false, wrapErr(err)
+	}
+	return out, true, nil
+}
+
+func Decompress(d mem.BufferSlice, maxReceiveMessageSize int, decompressor *CompressionPool, pool mem.BufferPool) (out mem.BufferSlice, isDecompressed bool, err error) {
+	if decompressor == nil || d.Len() == 0 {
+		return nil, false, nil
+	}
+	dcReader, err := decompressor.Decompress(d.Reader())
+	if err != nil {
+		return nil, false, errors.Newf("srpc: failed to decompress the message: %v", err).WithCode(errors.Internal)
+	}
+
+	// Read at most one byte more than the limit from the decompressor.
+	// Unless the limit is MaxInt64, in which case, that's impossible, so
+	// apply no limit.
+	if limit := int64(maxReceiveMessageSize); limit < math.MaxInt64 {
+		dcReader = io.LimitReader(dcReader, limit+1)
+	}
+	out, err = mem.ReadAll(dcReader, pool)
+	if err != nil {
+		out.Free()
+		return nil, false, errors.Newf("srpc: failed to read decompressed data: %v", err).WithCode(errors.Internal)
+	}
+
+	if out.Len() > maxReceiveMessageSize {
+		out.Free()
+		return nil, false, errors.Newf("srpc: received message after decompression larger than max %d", maxReceiveMessageSize).WithCode(errors.ResourceExhausted)
+	}
+	return out, true, nil
 }

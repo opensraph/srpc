@@ -16,10 +16,6 @@ type listener struct {
 // Accept waits for and returns the next incoming TLS connection.
 // The returned connection is of type *Conn.
 func (l *listener) Accept() (net.Conn, error) {
-	if l.Listener == nil {
-		return nil, nil
-	}
-
 	rawConn, err := l.Listener.Accept()
 	if err != nil {
 		return nil, err

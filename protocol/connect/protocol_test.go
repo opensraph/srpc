@@ -106,7 +106,7 @@ func TestConnectEndOfResponseCanonicalTrailers(t *testing.T) {
 	}
 	err = writer.Write(&envelope.Envelope{
 		Flags: connectFlagEnvelopeEndStream,
-		Data:  mem.NewBufferSlice(endStreamData),
+		Data:  mem.BufferSlice{mem.SliceBuffer(endStreamData)},
 	})
 	assert.Nil(t, err)
 

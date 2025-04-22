@@ -1,0 +1,8 @@
+POST /srpc.echo.v1.Echo/UnaryEcho HTTP/1.1
+Host: localhost:50051
+Authorization: Bearer some-secret-token
+Content-Type: application/json
+
+{
+    "message": "Hello, World!"
+}

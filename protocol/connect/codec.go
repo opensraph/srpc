@@ -60,7 +60,7 @@ func (m *connectStreamingMarshaler) MarshalEndStream(err error, trailer http.Hea
 	if marshalErr != nil {
 		return errors.Newf("marshal end stream: %w", marshalErr).WithCode(errors.Internal)
 	}
-	raw := mem.NewBufferSlice(data)
+	raw := mem.BufferSlice{mem.SliceBuffer(data)}
 	return m.Write(&envelope.Envelope{
 		Data:  raw,
 		Flags: connectFlagEnvelopeEndStream,
@@ -132,28 +132,28 @@ func (m *connectUnaryMarshaler) Marshal(message any) error {
 		return m.write(nil)
 	}
 
-	uncompressed, err := m.codec.Marshal(message)
-	defer uncompressed.Free()
+	data, err := m.codec.Marshal(message)
+	defer data.Free()
 	if err != nil {
 		return errors.Newf("marshal message: %w", err).WithCode(errors.Internal)
 	}
-	if uncompressed.Len() < m.compressMinBytes || m.compressionPool == nil {
-		if m.sendMaxBytes > 0 && uncompressed.Len() > m.sendMaxBytes {
-			return errors.Newf("message size %d exceeds sendMaxBytes %d", uncompressed.Len(), m.sendMaxBytes).WithCode(errors.ResourceExhausted)
+	if data.Len() > 0 && m.compressionPool != nil {
+		compressed, isCompressed, err := compress.Compress(data, m.compressionPool, m.bufferPool)
+		if err != nil {
+			return errors.Newf("compress message: %w", err).WithCode(errors.Internal)
 		}
-		return m.write(uncompressed)
+		if isCompressed {
+			data = compressed
+			compressed.Free()
+		}
 	}
 
-	compressed, err := m.compressionPool.Compress(uncompressed)
-	defer uncompressed.Free()
-	if err != nil {
-		return err
+	if m.sendMaxBytes > 0 && data.Len() > m.sendMaxBytes {
+		return errors.Newf("message size %d exceeds sendMaxBytes %d", data.Len(), m.sendMaxBytes).WithCode(errors.ResourceExhausted)
 	}
-	if m.sendMaxBytes > 0 && compressed.Len() > m.sendMaxBytes {
-		return errors.Newf("compressed message size %d exceeds sendMaxBytes %d", compressed.Len(), m.sendMaxBytes).WithCode(errors.ResourceExhausted)
-	}
+
 	headers.SetHeaderCanonical(m.header, connectUnaryHeaderCompression, m.compressionName)
-	return m.write(compressed)
+	return m.write(data)
 }
 
 func (m *connectUnaryMarshaler) write(data mem.BufferSlice) error {
@@ -193,53 +193,39 @@ func (m *connectUnaryRequestMarshaler) Marshal(message any) error {
 }
 
 func (m *connectUnaryRequestMarshaler) marshalWithGet(message any) error {
-	// TODO(jchadwick-buf): This function is mostly a superset of
-	// connectUnaryMarshaler.Marshal. This should be reconciled at some point.
-	var uncompressed mem.BufferSlice
-	defer uncompressed.Free()
+	var data mem.BufferSlice
+	defer data.Free()
 	var err error
 	if message != nil {
-		uncompressed, err = m.stableCodec.MarshalStable(message)
+		data, err = m.stableCodec.MarshalStable(message)
 		if err != nil {
 			return errors.Newf("marshal message stable: %w", err).WithCode(errors.Internal)
 		}
 	}
-	isTooBig := m.sendMaxBytes > 0 && uncompressed.Len() > m.sendMaxBytes
-	if isTooBig && m.compressionPool == nil {
-		return errors.Newf("message size %d exceeds sendMaxBytes %d", uncompressed.Len(), m.sendMaxBytes).WithCode(errors.ResourceExhausted)
-	}
-	if !isTooBig {
-		url := m.buildGetURL(uncompressed.Materialize(), false /* compressed */)
-		if m.getURLMaxBytes <= 0 || len(url.String()) < m.getURLMaxBytes {
-			m.writeWithGet(url)
-			return nil
+	if m.compressionPool != nil {
+		compressed, isCompressed, err := compress.Compress(data, m.compressionPool, m.bufferPool)
+		if err != nil {
+			return errors.Newf("compress message: %w", err).WithCode(errors.Internal)
 		}
-		if m.compressionPool == nil {
-			if m.getUseFallback {
-				return m.write(uncompressed)
-			}
-			return errors.Newf("url size %d exceeds getURLMaxBytes %d", len(url.String()), m.getURLMaxBytes).WithCode(errors.ResourceExhausted)
+		if isCompressed {
+			data = compressed
+			compressed.Free()
 		}
+
 	}
-	// Compress message to try to make it fit in the URL.
-	compressed, err := m.compressionPool.Compress(uncompressed)
-	defer compressed.Free()
-	if err != nil {
-		return err
+
+	isTooBig := m.sendMaxBytes > 0 && data.Len() > m.sendMaxBytes
+	if isTooBig {
+		return errors.Newf("message size %d exceeds sendMaxBytes %d", data.Len(), m.sendMaxBytes).WithCode(errors.ResourceExhausted)
 	}
-	if m.sendMaxBytes > 0 && compressed.Len() > m.sendMaxBytes {
-		return errors.Newf("compressed message size %d exceeds sendMaxBytes %d", compressed.Len(), m.sendMaxBytes).WithCode(errors.ResourceExhausted)
-	}
-	url := m.buildGetURL(compressed.Materialize(), true /* compressed */)
+
+	url := m.buildGetURL(data.Materialize(), false)
 	if m.getURLMaxBytes <= 0 || len(url.String()) < m.getURLMaxBytes {
 		m.writeWithGet(url)
 		return nil
 	}
-	if m.getUseFallback {
-		headers.SetHeaderCanonical(m.header, connectUnaryHeaderCompression, m.compressionName)
-		return m.write(compressed)
-	}
-	return errors.Newf("compressed url size %d exceeds getURLMaxBytes %d", len(url.String()), m.getURLMaxBytes).WithCode(errors.ResourceExhausted)
+
+	return errors.Newf("url size %d exceeds getURLMaxBytes %d", len(url.String()), m.getURLMaxBytes).WithCode(errors.ResourceExhausted)
 }
 
 func (m *connectUnaryRequestMarshaler) buildGetURL(data []byte, compressed bool) *url.URL {
@@ -315,12 +301,14 @@ func (u *connectUnaryUnmarshaler) UnmarshalFunc(message any, unmarshal func(mem.
 		return errors.Newf("message size %d is larger than configured max %d", bytesRead+discardedBytes, u.readMaxBytes).WithCode(errors.ResourceExhausted)
 	}
 	if data.Len() > 0 && u.compressionPool != nil {
-		decompressed, err := u.compressionPool.Decompress(data, int64(u.readMaxBytes))
-		defer decompressed.Free() //TODO: check if this is needed
+		decompressed, isDecompressed, err := compress.Decompress(data, u.readMaxBytes, u.compressionPool, u.bufferPool)
 		if err != nil {
-			return err
+			return errors.Newf("decompress message: %w", err).WithCode(errors.Internal)
 		}
-		data = decompressed
+		if isDecompressed {
+			data = decompressed
+			decompressed.Free()
+		}
 	}
 	if err := unmarshal(data, message); err != nil {
 		return errors.Newf("unmarshal message: %w", err).WithCode(errors.InvalidArgument)

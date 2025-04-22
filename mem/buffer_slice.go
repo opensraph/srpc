@@ -43,10 +43,6 @@ const (
 // be freed if the error is non-nil, unless explicitly stated.
 type BufferSlice []Buffer
 
-func NewBufferSlice(b []byte) BufferSlice {
-	return BufferSlice{SliceBuffer(b)}
-}
-
 // Len returns the sum of the length of all the Buffers in this slice.
 //
 // # Warning

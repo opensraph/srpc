@@ -295,8 +295,8 @@ func main() {
 
 该仓库包含展示各种用例的工作示例：
 
-- [基础服务端](examples/grpc/grpc-server/main.go) - 一个简单的 sRPC 服务端实现，带有认证和日志拦截器。服务端展示了单向和双向流 RPC、令牌验证以及基于 TLS 的凭据。
-- [基础客户端](examples/grpc/grpc-client/main.go) - 一个对应的客户端实现，展示了单向和双向流 RPC 调用、日志和令牌注入拦截器以及基于 TLS 的安全连接。
+- [基础服务端](examples/srpc-server/main.go) - 一个简单的 sRPC 服务端实现，带有认证和日志拦截器。服务端展示了单向和双向流 RPC、令牌验证以及基于 TLS 的凭据。
+- [基础客户端](examples/srpc-client/main.go) - 一个对应的客户端实现，展示了单向和双向流 RPC 调用、日志和令牌注入拦截器以及基于 TLS 的安全连接。
 
 ## 贡献
 

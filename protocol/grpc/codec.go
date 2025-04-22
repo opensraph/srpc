@@ -16,11 +16,8 @@ type grpcMarshaler struct {
 }
 
 func (m *grpcMarshaler) MarshalWebTrailers(trailer http.Header) error {
-	raw := m.EnvelopeWriter.BufferPool.Get(mem.Size8K)
-	defer m.EnvelopeWriter.BufferPool.Put(raw)
-	bs := mem.NewBufferSlice(*raw)
+	var bs mem.BufferSlice
 	w := mem.NewWriter(&bs, m.EnvelopeWriter.BufferPool)
-
 	for key, values := range trailer {
 		// Per the Go specification, keys inserted during iteration may be produced
 		// later in the iteration or may be skipped. For safety, avoid mutating the
