@@ -1,7 +1,0 @@
-# cat echo.curl | buf curl --data @- -H @- https://localhost:50051/srpc.echo.v1.Echo/UnaryEcho
-
-Authorization: Bearer some-secret-token
-
-{
-    "message" : "Hello, World!"
-}

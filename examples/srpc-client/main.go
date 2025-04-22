@@ -9,12 +9,12 @@ import (
 	"time"
 
 	"github.com/opensraph/srpc"
+	"github.com/opensraph/srpc/examples/data"
 	ecpb "github.com/opensraph/srpc/examples/proto/gen/srpc/echo/v1"
 	"golang.org/x/oauth2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/oauth"
-	"google.golang.org/grpc/examples/data"
 )
 
 var addr = flag.String("addr", "localhost:50051", "the address to connect to")
@@ -137,7 +137,7 @@ func main() {
 	flag.Parse()
 
 	// Create tls based credential.
-	creds, err := credentials.NewClientTLSFromFile(data.Path("x509/ca_cert.pem"), "x.test.example.com")
+	creds, err := credentials.NewClientTLSFromFile(data.Path("x509/localhost.pem"), "localhost")
 	if err != nil {
 		log.Fatalf("failed to load credentials: %v", err)
 	}
