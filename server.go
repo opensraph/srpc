@@ -16,6 +16,7 @@ import (
 	"golang.org/x/net/http2/h2c"
 	"golang.org/x/net/trace"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 )
 
 var (
@@ -24,6 +25,7 @@ var (
 
 type Server interface {
 	grpc.ServiceRegistrar
+	reflection.GRPCServer
 	Serve(l net.Listener) error
 	Stop()
 	GracefulStop()
@@ -234,6 +236,32 @@ func (s *server) register(sd *grpc.ServiceDesc, ss any) {
 	}
 
 	s.services[sd.ServiceName] = serviceDesc
+}
+
+// GetServiceInfo implements Server.
+func (s *server) GetServiceInfo() map[string]grpc.ServiceInfo {
+	ret := make(map[string]grpc.ServiceInfo)
+	for n, srv := range s.services {
+		methods := srv.schema.Methods()
+		if methods.Len() == 0 {
+			continue
+		}
+		gms := make([]grpc.MethodInfo, len(srv.handlerDesc))
+		for i := 0; i < methods.Len(); i++ {
+			method := methods.Get(i)
+			gms[i] = grpc.MethodInfo{
+				Name:           string(method.Name()),
+				IsClientStream: method.IsStreamingClient(),
+				IsServerStream: method.IsStreamingServer(),
+			}
+		}
+
+		ret[n] = grpc.ServiceInfo{
+			Methods:  gms,
+			Metadata: srv.metadata,
+		}
+	}
+	return ret
 }
 
 // printf records an event in s's event log, unless s has been stopped.

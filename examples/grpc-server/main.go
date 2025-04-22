@@ -10,15 +10,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/opensraph/srpc"
 	"github.com/opensraph/srpc/errors"
+	"github.com/opensraph/srpc/examples/data"
+	pb "github.com/opensraph/srpc/examples/proto/gen/srpc/echo/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/reflection"
-
-	"github.com/opensraph/srpc/examples/data"
-	pb "github.com/opensraph/srpc/examples/proto/gen/srpc/echo/v1"
 )
 
 var (
@@ -137,11 +135,11 @@ func main() {
 		log.Fatalf("failed to create credentials: %v", err)
 	}
 
-	s := srpc.NewServer(
-		srpc.Creds(creds),
-		srpc.UnaryInterceptor(unaryInterceptor),
-		srpc.StreamInterceptor(streamInterceptor),
-		srpc.EnableTracing(),
+	s := grpc.NewServer(
+		grpc.Creds(creds),
+		grpc.UnaryInterceptor(unaryInterceptor),
+		grpc.StreamInterceptor(streamInterceptor),
+		grpc.RPCCompressor(grpc.NewGZIPCompressor()),
 	)
 
 	// Reflection
