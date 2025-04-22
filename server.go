@@ -10,6 +10,8 @@ import (
 	"runtime"
 	"sync"
 
+	"net/http/pprof"
+
 	"github.com/opensraph/srpc/errors"
 	"github.com/opensraph/srpc/internal/srpcsync"
 	"golang.org/x/net/http2"
@@ -47,9 +49,24 @@ type server struct {
 	quit    *srpcsync.Event
 	done    *srpcsync.Event
 	serveWG sync.WaitGroup
+}
 
-	serverWorkerChannel      chan func()
-	serverWorkerChannelClose func()
+func (s *server) setupTracing() {
+	prefix := "/debug"
+
+	_, file, line, _ := runtime.Caller(1)
+	s.events = trace.NewEventLog("srpc.Server", fmt.Sprintf("%s:%d", file, line))
+	s.mux.HandleFunc(prefix+"/event", trace.Events)
+	s.mux.HandleFunc(prefix+"/trace", trace.Traces)
+	s.opts.interceptor.ChainUnaryInterceptor(traceUnaryInterceptor())
+	s.opts.interceptor.ChainStreamInterceptor(traceStreamInterceptor())
+
+	// setup pprof
+	s.mux.HandleFunc(prefix+"/pprof/", pprof.Index)
+	s.mux.HandleFunc(prefix+"/pprof/cmdline", pprof.Cmdline)
+	s.mux.HandleFunc(prefix+"/pprof/profile", pprof.Profile)
+	s.mux.HandleFunc(prefix+"/pprof/symbol", pprof.Symbol)
+	s.mux.HandleFunc(prefix+"/pprof/trace", pprof.Trace)
 }
 
 func NewServer(opt ...ServerOption) *server {
@@ -83,12 +100,7 @@ func NewServer(opt ...ServerOption) *server {
 	}
 
 	if s.opts.enableTracing {
-		_, file, line, _ := runtime.Caller(1)
-		s.events = trace.NewEventLog("srpc.Server", fmt.Sprintf("%s:%d", file, line))
-		s.mux.HandleFunc("/_srpc/event", trace.Events)
-		s.mux.HandleFunc("/_srpc/trace", trace.Traces)
-		s.opts.interceptor.ChainUnaryInterceptor(traceUnaryInterceptor())
-		s.opts.interceptor.ChainStreamInterceptor(traceStreamInterceptor())
+		s.setupTracing()
 	}
 
 	return s
