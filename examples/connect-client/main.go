@@ -89,10 +89,7 @@ func main() {
 	}
 
 	// Create ConnectRPC client
-	client := echov1connect.NewEchoClient(
-		httpClient,
-		*serverAddr,
-	)
+	client := echov1connect.NewEchoClient(httpClient, *serverAddr)
 
 	// Execute unary call
 	unaryCall(client, "Hello, ConnectRPC!")
