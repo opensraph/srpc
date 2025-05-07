@@ -2,6 +2,7 @@ package compress
 
 import (
 	"io"
+	"log/slog"
 	"math"
 	"strings"
 	"sync"
@@ -184,6 +185,19 @@ func isCommaOrSpace(c rune) bool {
 }
 
 func Compress(in mem.BufferSlice, compressor *CompressionPool, pool mem.BufferPool) (out mem.BufferSlice, isCompressed bool, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			if out != nil {
+				out.Free()
+				out = nil
+			}
+			// We don't want to panic in the middle of a compression operation, so
+			// we catch the panic and log it.
+			slog.Error("srpc: panic during compression", slog.Any("panic", r))
+			isCompressed = false
+		}
+	}()
+
 	const minCompressionSize = 32
 
 	if compressor == nil || in.Len() < minCompressionSize {
