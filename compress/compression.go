@@ -63,11 +63,6 @@ func NewCompressionPool(compressor Compressor, decompressor Decompressor) *Compr
 	}
 }
 
-type reader struct {
-	Decompressor
-	pool *sync.Pool
-}
-
 func (c *CompressionPool) Decompress(r io.Reader) (io.Reader, error) {
 	z, inPool := c.poolDecompressor.Get().(Decompressor)
 	if !inPool {
@@ -80,16 +75,8 @@ func (c *CompressionPool) Decompress(r io.Reader) (io.Reader, error) {
 	return z, nil
 }
 
-type writer struct {
-	Compressor
-	pool *sync.Pool
-}
-
 func (c *CompressionPool) Compress(w io.Writer) (io.WriteCloser, error) {
-	z, inPool := c.poolCompressor.Get().(Compressor)
-	if !inPool {
-		return nil, errors.Newf("failed to get compressor from pool")
-	}
+	z := c.poolCompressor.Get().(Compressor)
 	z.Reset(w)
 	return z, nil
 }
@@ -197,26 +184,67 @@ func isCommaOrSpace(c rune) bool {
 }
 
 func Compress(in mem.BufferSlice, compressor *CompressionPool, pool mem.BufferPool) (out mem.BufferSlice, isCompressed bool, err error) {
-	if compressor == nil || in.Len() == 0 {
+	const minCompressionSize = 32
+
+	if compressor == nil || in.Len() < minCompressionSize {
 		return nil, false, nil
 	}
+
+	// Check the input for valid data.
+	hasValidData := false
+	for _, b := range in {
+		if len(b.ReadOnlyData()) > 0 {
+			hasValidData = true
+			break
+		}
+	}
+	if !hasValidData {
+		return nil, false, nil
+	}
+
 	w := mem.NewWriter(&out, pool)
 	wrapErr := func(err error) error {
 		out.Free()
 		return errors.Newf("srpc: error while compressing: %v", err.Error()).WithCode(errors.Internal)
 	}
+
 	z, err := compressor.Compress(w)
 	if err != nil {
 		return nil, false, wrapErr(err)
 	}
+
+	// Track the number of bytes written to the compressor. If we write
+	// nothing, we can just return the original data.
+	bytesWritten := 0
+
 	for _, b := range in {
-		if _, err := z.Write(b.ReadOnlyData()); err != nil {
+		data := b.ReadOnlyData()
+		if len(data) == 0 {
+			continue
+		}
+		n, err := z.Write(data)
+		if err != nil {
+			// Ensure we close the compressor if we fail to write.
+			_ = z.Close() //nolint:errcheck
 			return nil, false, wrapErr(err)
 		}
+		bytesWritten += n
 	}
-	if err := z.Close(); err != nil {
-		return nil, false, wrapErr(err)
+
+	// Only close the compressor if it wrote something.
+	if bytesWritten > 0 {
+		if cerr := z.Close(); cerr != nil {
+			return nil, false, wrapErr(cerr)
+		}
 	}
+
+	// If the compressor didn't write any data, or if the compressed data is
+	// larger than the original data, we should return the original data.
+	if bytesWritten == 0 || out.Len() >= in.Len() {
+		out.Free()
+		return nil, false, nil
+	}
+
 	return out, true, nil
 }
 

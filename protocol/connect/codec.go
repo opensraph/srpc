@@ -143,6 +143,7 @@ func (m *connectUnaryMarshaler) Marshal(message any) error {
 			return errors.Newf("compress message: %w", err).WithCode(errors.Internal)
 		}
 		if isCompressed {
+			headers.SetHeaderCanonical(m.header, connectUnaryHeaderCompression, m.compressionName)
 			data = compressed
 			compressed.Free()
 		}
@@ -152,7 +153,6 @@ func (m *connectUnaryMarshaler) Marshal(message any) error {
 		return errors.Newf("message size %d exceeds sendMaxBytes %d", data.Len(), m.sendMaxBytes).WithCode(errors.ResourceExhausted)
 	}
 
-	headers.SetHeaderCanonical(m.header, connectUnaryHeaderCompression, m.compressionName)
 	return m.write(data)
 }
 
