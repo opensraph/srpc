@@ -387,7 +387,6 @@ func (h *Handler) ServeHTTP(responseWriter http.ResponseWriter, request *http.Re
 	}
 
 	ctx = metadata.NewIncomingContext(ctx, metadata.MD(request.Header))
-	ctx = contextWithResponseWriter(ctx, responseWriter)
 	_ = connCloser.Close(h.implementation(ctx, connCloser))
 }
 
@@ -440,15 +439,4 @@ func (g *grpcServerStreamBridge) SetHeader(header metadata.MD) error {
 // SetTrailer implements grpc.ServerStream.
 func (g *grpcServerStreamBridge) SetTrailer(trailer metadata.MD) {
 	headers.MergeHeaders(g.stream.ResponseTrailer(), http.Header(trailer))
-}
-
-type responseWriterKey struct{}
-
-func contextWithResponseWriter(ctx context.Context, w http.ResponseWriter) context.Context {
-	return context.WithValue(ctx, responseWriterKey{}, w)
-}
-
-func ResponseWriterFromContext(ctx context.Context) (http.ResponseWriter, bool) {
-	w, ok := ctx.Value(responseWriterKey{}).(http.ResponseWriter)
-	return w, ok
 }
