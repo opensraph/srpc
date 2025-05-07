@@ -58,13 +58,21 @@ func NewServer(opt ...ServerOption) *server {
 	for _, o := range opt {
 		o(&opts)
 	}
-	mux := http.NewServeMux()
+
 	http2Server := &http2.Server{
 		MaxConcurrentStreams: opts.maxConcurrentStreams,
 	}
 
+	mux := http.NewServeMux()
+
+	handler := h2c.NewHandler(mux, http2Server)
+
+	if opts.globalHandler != nil {
+		handler = opts.globalHandler(handler)
+	}
+
 	http1Server := &http.Server{
-		Handler:      h2c.NewHandler(mux, http2Server),
+		Handler:      handler,
 		ReadTimeout:  opts.readTimeout,
 		WriteTimeout: opts.writeTimeout,
 		IdleTimeout:  opts.idleTimeout,

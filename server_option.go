@@ -37,6 +37,7 @@ type serverOptions struct {
 	maxSendMessageSize    int
 	creds                 credentials.TransportCredentials
 	interceptor           Interceptor
+	globalHandler         func(next http.Handler) http.Handler
 	unknownHandler        http.Handler
 	compressionNames      []string
 	compressionPools      map[string]*compress.CompressionPool
@@ -126,6 +127,14 @@ func MaxSendMsgSize(n int) ServerOption {
 func Creds(c credentials.TransportCredentials) ServerOption {
 	return func(o *serverOptions) {
 		o.creds = c
+	}
+}
+
+// GlobalHandler returns a ServerOption that sets the global handler for the server.
+// This handler will be used for all requests that do not match any registered service or method.
+func GlobalHandler(h func(next http.Handler) http.Handler) ServerOption {
+	return func(o *serverOptions) {
+		o.globalHandler = h
 	}
 }
 

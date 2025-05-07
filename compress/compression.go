@@ -86,7 +86,10 @@ type writer struct {
 }
 
 func (c *CompressionPool) Compress(w io.Writer) (io.WriteCloser, error) {
-	z := c.poolCompressor.Get().(*writer)
+	z, inPool := c.poolCompressor.Get().(Compressor)
+	if !inPool {
+		return nil, errors.Newf("failed to get compressor from pool")
+	}
 	z.Reset(w)
 	return z, nil
 }
