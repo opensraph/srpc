@@ -5,12 +5,11 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"reflect"
 	"runtime"
 	"sync"
-
-	"net/http/pprof"
 
 	"github.com/opensraph/srpc/errors"
 	"github.com/opensraph/srpc/internal/srpcsync"
@@ -49,24 +48,6 @@ type server struct {
 	quit    *srpcsync.Event
 	done    *srpcsync.Event
 	serveWG sync.WaitGroup
-}
-
-func (s *server) setupTracing() {
-	prefix := "/debug"
-
-	_, file, line, _ := runtime.Caller(1)
-	s.events = trace.NewEventLog("srpc.Server", fmt.Sprintf("%s:%d", file, line))
-	s.mux.HandleFunc(prefix+"/event", trace.Events)
-	s.mux.HandleFunc(prefix+"/trace", trace.Traces)
-	s.opts.interceptor.ChainUnaryInterceptor(traceUnaryInterceptor())
-	s.opts.interceptor.ChainStreamInterceptor(traceStreamInterceptor())
-
-	// setup pprof
-	s.mux.HandleFunc(prefix+"/pprof/", pprof.Index)
-	s.mux.HandleFunc(prefix+"/pprof/cmdline", pprof.Cmdline)
-	s.mux.HandleFunc(prefix+"/pprof/profile", pprof.Profile)
-	s.mux.HandleFunc(prefix+"/pprof/symbol", pprof.Symbol)
-	s.mux.HandleFunc(prefix+"/pprof/trace", pprof.Trace)
 }
 
 func NewServer(opt ...ServerOption) *server {
@@ -159,6 +140,10 @@ func (s *server) Serve(lis net.Listener) error {
 	}
 }
 
+func (s *server) Handle(pattern string, handler http.Handler) {
+	s.mux.Handle(pattern, handler)
+}
+
 // Stop stops the sRPC server. It immediately closes all open
 // connections and listeners.
 // It cancels all active RPCs on the server side and the corresponding
@@ -209,10 +194,6 @@ func (s *server) closeListenersLocked() {
 		lis.Close()
 	}
 	s.lis = nil
-}
-
-func (s *server) Handle(pattern string, handler http.Handler) {
-	s.mux.Handle(pattern, handler)
 }
 
 // RegisterService implements grpc.ServiceRegistrar.
@@ -274,6 +255,24 @@ func (s *server) GetServiceInfo() map[string]grpc.ServiceInfo {
 		}
 	}
 	return ret
+}
+
+func (s *server) setupTracing() {
+	prefix := "/debug"
+
+	_, file, line, _ := runtime.Caller(1)
+	s.events = trace.NewEventLog("srpc.Server", fmt.Sprintf("%s:%d", file, line))
+	s.mux.HandleFunc(prefix+"/event", trace.Events)
+	s.mux.HandleFunc(prefix+"/trace", trace.Traces)
+	s.opts.interceptor.ChainUnaryInterceptor(traceUnaryInterceptor())
+	s.opts.interceptor.ChainStreamInterceptor(traceStreamInterceptor())
+
+	// setup pprof
+	s.mux.HandleFunc(prefix+"/pprof/", pprof.Index)
+	s.mux.HandleFunc(prefix+"/pprof/cmdline", pprof.Cmdline)
+	s.mux.HandleFunc(prefix+"/pprof/profile", pprof.Profile)
+	s.mux.HandleFunc(prefix+"/pprof/symbol", pprof.Symbol)
+	s.mux.HandleFunc(prefix+"/pprof/trace", pprof.Trace)
 }
 
 // printf records an event in s's event log, unless s has been stopped.
