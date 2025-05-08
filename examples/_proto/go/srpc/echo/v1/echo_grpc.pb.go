@@ -19,18 +19,18 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Echo_UnaryEcho_FullMethodName                  = "/srpc.echo.v1.Echo/UnaryEcho"
-	Echo_ServerStreamingEcho_FullMethodName        = "/srpc.echo.v1.Echo/ServerStreamingEcho"
-	Echo_ClientStreamingEcho_FullMethodName        = "/srpc.echo.v1.Echo/ClientStreamingEcho"
-	Echo_BidirectionalStreamingEcho_FullMethodName = "/srpc.echo.v1.Echo/BidirectionalStreamingEcho"
+	EchoService_UnaryEcho_FullMethodName                  = "/srpc.echo.v1.EchoService/UnaryEcho"
+	EchoService_ServerStreamingEcho_FullMethodName        = "/srpc.echo.v1.EchoService/ServerStreamingEcho"
+	EchoService_ClientStreamingEcho_FullMethodName        = "/srpc.echo.v1.EchoService/ClientStreamingEcho"
+	EchoService_BidirectionalStreamingEcho_FullMethodName = "/srpc.echo.v1.EchoService/BidirectionalStreamingEcho"
 )
 
-// EchoClient is the client API for Echo service.
+// EchoServiceClient is the client API for EchoService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
 // Echo is the echo service.
-type EchoClient interface {
+type EchoServiceClient interface {
 	// UnaryEcho is unary echo.
 	UnaryEcho(ctx context.Context, in *EchoRequest, opts ...grpc.CallOption) (*EchoResponse, error)
 	// ServerStreamingEcho is server side streaming.
@@ -41,27 +41,27 @@ type EchoClient interface {
 	BidirectionalStreamingEcho(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[EchoRequest, EchoResponse], error)
 }
 
-type echoClient struct {
+type echoServiceClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewEchoClient(cc grpc.ClientConnInterface) EchoClient {
-	return &echoClient{cc}
+func NewEchoServiceClient(cc grpc.ClientConnInterface) EchoServiceClient {
+	return &echoServiceClient{cc}
 }
 
-func (c *echoClient) UnaryEcho(ctx context.Context, in *EchoRequest, opts ...grpc.CallOption) (*EchoResponse, error) {
+func (c *echoServiceClient) UnaryEcho(ctx context.Context, in *EchoRequest, opts ...grpc.CallOption) (*EchoResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(EchoResponse)
-	err := c.cc.Invoke(ctx, Echo_UnaryEcho_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, EchoService_UnaryEcho_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *echoClient) ServerStreamingEcho(ctx context.Context, in *EchoRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[EchoResponse], error) {
+func (c *echoServiceClient) ServerStreamingEcho(ctx context.Context, in *EchoRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[EchoResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Echo_ServiceDesc.Streams[0], Echo_ServerStreamingEcho_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &EchoService_ServiceDesc.Streams[0], EchoService_ServerStreamingEcho_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -76,11 +76,11 @@ func (c *echoClient) ServerStreamingEcho(ctx context.Context, in *EchoRequest, o
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Echo_ServerStreamingEchoClient = grpc.ServerStreamingClient[EchoResponse]
+type EchoService_ServerStreamingEchoClient = grpc.ServerStreamingClient[EchoResponse]
 
-func (c *echoClient) ClientStreamingEcho(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[EchoRequest, EchoResponse], error) {
+func (c *echoServiceClient) ClientStreamingEcho(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[EchoRequest, EchoResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Echo_ServiceDesc.Streams[1], Echo_ClientStreamingEcho_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &EchoService_ServiceDesc.Streams[1], EchoService_ClientStreamingEcho_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -89,11 +89,11 @@ func (c *echoClient) ClientStreamingEcho(ctx context.Context, opts ...grpc.CallO
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Echo_ClientStreamingEchoClient = grpc.ClientStreamingClient[EchoRequest, EchoResponse]
+type EchoService_ClientStreamingEchoClient = grpc.ClientStreamingClient[EchoRequest, EchoResponse]
 
-func (c *echoClient) BidirectionalStreamingEcho(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[EchoRequest, EchoResponse], error) {
+func (c *echoServiceClient) BidirectionalStreamingEcho(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[EchoRequest, EchoResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Echo_ServiceDesc.Streams[2], Echo_BidirectionalStreamingEcho_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &EchoService_ServiceDesc.Streams[2], EchoService_BidirectionalStreamingEcho_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -102,14 +102,14 @@ func (c *echoClient) BidirectionalStreamingEcho(ctx context.Context, opts ...grp
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Echo_BidirectionalStreamingEchoClient = grpc.BidiStreamingClient[EchoRequest, EchoResponse]
+type EchoService_BidirectionalStreamingEchoClient = grpc.BidiStreamingClient[EchoRequest, EchoResponse]
 
-// EchoServer is the server API for Echo service.
-// All implementations must embed UnimplementedEchoServer
+// EchoServiceServer is the server API for EchoService service.
+// All implementations must embed UnimplementedEchoServiceServer
 // for forward compatibility.
 //
 // Echo is the echo service.
-type EchoServer interface {
+type EchoServiceServer interface {
 	// UnaryEcho is unary echo.
 	UnaryEcho(context.Context, *EchoRequest) (*EchoResponse, error)
 	// ServerStreamingEcho is server side streaming.
@@ -118,118 +118,118 @@ type EchoServer interface {
 	ClientStreamingEcho(grpc.ClientStreamingServer[EchoRequest, EchoResponse]) error
 	// BidirectionalStreamingEcho is bidi streaming.
 	BidirectionalStreamingEcho(grpc.BidiStreamingServer[EchoRequest, EchoResponse]) error
-	mustEmbedUnimplementedEchoServer()
+	mustEmbedUnimplementedEchoServiceServer()
 }
 
-// UnimplementedEchoServer must be embedded to have
+// UnimplementedEchoServiceServer must be embedded to have
 // forward compatible implementations.
 //
 // NOTE: this should be embedded by value instead of pointer to avoid a nil
 // pointer dereference when methods are called.
-type UnimplementedEchoServer struct{}
+type UnimplementedEchoServiceServer struct{}
 
-func (UnimplementedEchoServer) UnaryEcho(context.Context, *EchoRequest) (*EchoResponse, error) {
+func (UnimplementedEchoServiceServer) UnaryEcho(context.Context, *EchoRequest) (*EchoResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UnaryEcho not implemented")
 }
-func (UnimplementedEchoServer) ServerStreamingEcho(*EchoRequest, grpc.ServerStreamingServer[EchoResponse]) error {
+func (UnimplementedEchoServiceServer) ServerStreamingEcho(*EchoRequest, grpc.ServerStreamingServer[EchoResponse]) error {
 	return status.Errorf(codes.Unimplemented, "method ServerStreamingEcho not implemented")
 }
-func (UnimplementedEchoServer) ClientStreamingEcho(grpc.ClientStreamingServer[EchoRequest, EchoResponse]) error {
+func (UnimplementedEchoServiceServer) ClientStreamingEcho(grpc.ClientStreamingServer[EchoRequest, EchoResponse]) error {
 	return status.Errorf(codes.Unimplemented, "method ClientStreamingEcho not implemented")
 }
-func (UnimplementedEchoServer) BidirectionalStreamingEcho(grpc.BidiStreamingServer[EchoRequest, EchoResponse]) error {
+func (UnimplementedEchoServiceServer) BidirectionalStreamingEcho(grpc.BidiStreamingServer[EchoRequest, EchoResponse]) error {
 	return status.Errorf(codes.Unimplemented, "method BidirectionalStreamingEcho not implemented")
 }
-func (UnimplementedEchoServer) mustEmbedUnimplementedEchoServer() {}
-func (UnimplementedEchoServer) testEmbeddedByValue()              {}
+func (UnimplementedEchoServiceServer) mustEmbedUnimplementedEchoServiceServer() {}
+func (UnimplementedEchoServiceServer) testEmbeddedByValue()                     {}
 
-// UnsafeEchoServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to EchoServer will
+// UnsafeEchoServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to EchoServiceServer will
 // result in compilation errors.
-type UnsafeEchoServer interface {
-	mustEmbedUnimplementedEchoServer()
+type UnsafeEchoServiceServer interface {
+	mustEmbedUnimplementedEchoServiceServer()
 }
 
-func RegisterEchoServer(s grpc.ServiceRegistrar, srv EchoServer) {
-	// If the following call pancis, it indicates UnimplementedEchoServer was
+func RegisterEchoServiceServer(s grpc.ServiceRegistrar, srv EchoServiceServer) {
+	// If the following call pancis, it indicates UnimplementedEchoServiceServer was
 	// embedded by pointer and is nil.  This will cause panics if an
 	// unimplemented method is ever invoked, so we test this at initialization
 	// time to prevent it from happening at runtime later due to I/O.
 	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
 		t.testEmbeddedByValue()
 	}
-	s.RegisterService(&Echo_ServiceDesc, srv)
+	s.RegisterService(&EchoService_ServiceDesc, srv)
 }
 
-func _Echo_UnaryEcho_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _EchoService_UnaryEcho_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(EchoRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(EchoServer).UnaryEcho(ctx, in)
+		return srv.(EchoServiceServer).UnaryEcho(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Echo_UnaryEcho_FullMethodName,
+		FullMethod: EchoService_UnaryEcho_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(EchoServer).UnaryEcho(ctx, req.(*EchoRequest))
+		return srv.(EchoServiceServer).UnaryEcho(ctx, req.(*EchoRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Echo_ServerStreamingEcho_Handler(srv interface{}, stream grpc.ServerStream) error {
+func _EchoService_ServerStreamingEcho_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(EchoRequest)
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}
-	return srv.(EchoServer).ServerStreamingEcho(m, &grpc.GenericServerStream[EchoRequest, EchoResponse]{ServerStream: stream})
+	return srv.(EchoServiceServer).ServerStreamingEcho(m, &grpc.GenericServerStream[EchoRequest, EchoResponse]{ServerStream: stream})
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Echo_ServerStreamingEchoServer = grpc.ServerStreamingServer[EchoResponse]
+type EchoService_ServerStreamingEchoServer = grpc.ServerStreamingServer[EchoResponse]
 
-func _Echo_ClientStreamingEcho_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(EchoServer).ClientStreamingEcho(&grpc.GenericServerStream[EchoRequest, EchoResponse]{ServerStream: stream})
+func _EchoService_ClientStreamingEcho_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(EchoServiceServer).ClientStreamingEcho(&grpc.GenericServerStream[EchoRequest, EchoResponse]{ServerStream: stream})
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Echo_ClientStreamingEchoServer = grpc.ClientStreamingServer[EchoRequest, EchoResponse]
+type EchoService_ClientStreamingEchoServer = grpc.ClientStreamingServer[EchoRequest, EchoResponse]
 
-func _Echo_BidirectionalStreamingEcho_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(EchoServer).BidirectionalStreamingEcho(&grpc.GenericServerStream[EchoRequest, EchoResponse]{ServerStream: stream})
+func _EchoService_BidirectionalStreamingEcho_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(EchoServiceServer).BidirectionalStreamingEcho(&grpc.GenericServerStream[EchoRequest, EchoResponse]{ServerStream: stream})
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Echo_BidirectionalStreamingEchoServer = grpc.BidiStreamingServer[EchoRequest, EchoResponse]
+type EchoService_BidirectionalStreamingEchoServer = grpc.BidiStreamingServer[EchoRequest, EchoResponse]
 
-// Echo_ServiceDesc is the grpc.ServiceDesc for Echo service.
+// EchoService_ServiceDesc is the grpc.ServiceDesc for EchoService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var Echo_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "srpc.echo.v1.Echo",
-	HandlerType: (*EchoServer)(nil),
+var EchoService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "srpc.echo.v1.EchoService",
+	HandlerType: (*EchoServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "UnaryEcho",
-			Handler:    _Echo_UnaryEcho_Handler,
+			Handler:    _EchoService_UnaryEcho_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "ServerStreamingEcho",
-			Handler:       _Echo_ServerStreamingEcho_Handler,
+			Handler:       _EchoService_ServerStreamingEcho_Handler,
 			ServerStreams: true,
 		},
 		{
 			StreamName:    "ClientStreamingEcho",
-			Handler:       _Echo_ClientStreamingEcho_Handler,
+			Handler:       _EchoService_ClientStreamingEcho_Handler,
 			ClientStreams: true,
 		},
 		{
 			StreamName:    "BidirectionalStreamingEcho",
-			Handler:       _Echo_BidirectionalStreamingEcho_Handler,
+			Handler:       _EchoService_BidirectionalStreamingEcho_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
 		},

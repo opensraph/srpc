@@ -119,13 +119,13 @@ const file_srpc_echo_v1_echo_proto_rawDesc = "" +
 	"\vEchoRequest\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\"(\n" +
 	"\fEchoResponse\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage2\xcb\x02\n" +
-	"\x04Echo\x12D\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage2\xd2\x02\n" +
+	"\vEchoService\x12D\n" +
 	"\tUnaryEcho\x12\x19.srpc.echo.v1.EchoRequest\x1a\x1a.srpc.echo.v1.EchoResponse\"\x00\x12P\n" +
 	"\x13ServerStreamingEcho\x12\x19.srpc.echo.v1.EchoRequest\x1a\x1a.srpc.echo.v1.EchoResponse\"\x000\x01\x12P\n" +
 	"\x13ClientStreamingEcho\x12\x19.srpc.echo.v1.EchoRequest\x1a\x1a.srpc.echo.v1.EchoResponse\"\x00(\x01\x12Y\n" +
 	"\x1aBidirectionalStreamingEcho\x12\x19.srpc.echo.v1.EchoRequest\x1a\x1a.srpc.echo.v1.EchoResponse\"\x00(\x010\x01B\xb3\x01\n" +
-	"\x10com.srpc.echo.v1B\tEchoProtoP\x01Z@github.com/opensraph/srpc/examples/proto/gen/srpc/echo/v1;echov1\xa2\x02\x03SEX\xaa\x02\fSrpc.Echo.V1\xca\x02\rSrpc\\Echo_\\V1\xe2\x02\x19Srpc\\Echo_\\V1\\GPBMetadata\xea\x02\x0eSrpc::Echo::V1b\x06proto3"
+	"\x10com.srpc.echo.v1B\tEchoProtoP\x01Z@github.com/opensraph/srpc/examples/_proto/go/srpc/echo/v1;echov1\xa2\x02\x03SEX\xaa\x02\fSrpc.Echo.V1\xca\x02\rSrpc\\Echo_\\V1\xe2\x02\x19Srpc\\Echo_\\V1\\GPBMetadata\xea\x02\x0eSrpc::Echo::V1b\x06proto3"
 
 var (
 	file_srpc_echo_v1_echo_proto_rawDescOnce sync.Once
@@ -145,14 +145,14 @@ var file_srpc_echo_v1_echo_proto_goTypes = []any{
 	(*EchoResponse)(nil), // 1: srpc.echo.v1.EchoResponse
 }
 var file_srpc_echo_v1_echo_proto_depIdxs = []int32{
-	0, // 0: srpc.echo.v1.Echo.UnaryEcho:input_type -> srpc.echo.v1.EchoRequest
-	0, // 1: srpc.echo.v1.Echo.ServerStreamingEcho:input_type -> srpc.echo.v1.EchoRequest
-	0, // 2: srpc.echo.v1.Echo.ClientStreamingEcho:input_type -> srpc.echo.v1.EchoRequest
-	0, // 3: srpc.echo.v1.Echo.BidirectionalStreamingEcho:input_type -> srpc.echo.v1.EchoRequest
-	1, // 4: srpc.echo.v1.Echo.UnaryEcho:output_type -> srpc.echo.v1.EchoResponse
-	1, // 5: srpc.echo.v1.Echo.ServerStreamingEcho:output_type -> srpc.echo.v1.EchoResponse
-	1, // 6: srpc.echo.v1.Echo.ClientStreamingEcho:output_type -> srpc.echo.v1.EchoResponse
-	1, // 7: srpc.echo.v1.Echo.BidirectionalStreamingEcho:output_type -> srpc.echo.v1.EchoResponse
+	0, // 0: srpc.echo.v1.EchoService.UnaryEcho:input_type -> srpc.echo.v1.EchoRequest
+	0, // 1: srpc.echo.v1.EchoService.ServerStreamingEcho:input_type -> srpc.echo.v1.EchoRequest
+	0, // 2: srpc.echo.v1.EchoService.ClientStreamingEcho:input_type -> srpc.echo.v1.EchoRequest
+	0, // 3: srpc.echo.v1.EchoService.BidirectionalStreamingEcho:input_type -> srpc.echo.v1.EchoRequest
+	1, // 4: srpc.echo.v1.EchoService.UnaryEcho:output_type -> srpc.echo.v1.EchoResponse
+	1, // 5: srpc.echo.v1.EchoService.ServerStreamingEcho:output_type -> srpc.echo.v1.EchoResponse
+	1, // 6: srpc.echo.v1.EchoService.ClientStreamingEcho:output_type -> srpc.echo.v1.EchoResponse
+	1, // 7: srpc.echo.v1.EchoService.BidirectionalStreamingEcho:output_type -> srpc.echo.v1.EchoResponse
 	4, // [4:8] is the sub-list for method output_type
 	0, // [0:4] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name

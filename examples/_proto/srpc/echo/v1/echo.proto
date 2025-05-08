@@ -13,7 +13,7 @@ message EchoResponse {
 }
 
 // Echo is the echo service.
-service Echo {
+service EchoService {
   // UnaryEcho is unary echo.
   rpc UnaryEcho(EchoRequest) returns (EchoResponse) {}
   // ServerStreamingEcho is server side streaming.

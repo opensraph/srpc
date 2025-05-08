@@ -1,0 +1,61 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+
+        {
+            "name": "Launch Example(sRPC Server)",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/examples/srpc-server/main.go",
+            "console": "internalConsole",
+        },
+        {
+            "name": "Launch Example(sRPC Client)",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/examples/srpc-client/main.go",
+            "console": "internalConsole",
+        },
+        {
+            "name": "Launch Example(connect Client)",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/examples/connect-client/main.go",
+            "console": "internalConsole",
+        },
+        {
+            "name": "Launch Example(vite-demo)",
+            "type": "node",
+            "request": "launch",
+            "runtimeExecutable": "npm",
+            "runtimeArgs": [ "run", "dev" ],
+            "cwd": "${workspaceFolder}/examples/vite-demo",
+            "serverReadyAction": {
+                "pattern": "Local: http://localhost:([0-9]+)",
+                "uriFormat": "http://localhost:%s",
+                "action": "openExternally"
+            },
+            "sourceMaps": true,
+            "outFiles": [ "${workspaceFolder}/examples/vite-demo/dist/**/*.js" ],
+            "resolveSourceMapLocations": [
+                "${workspaceFolder}/**",
+                "!**/node_modules/**"
+            ]
+        },
+        {
+            "name": "Launch Example Edge(vite-demo)",
+            "type": "msedge",
+            "request": "launch",
+            "url": "https://localhost:5173",
+            "webRoot": "${workspaceFolder}/examples/vite-demo",
+            "sourceMapPathOverrides": {
+                "webpack:///src/*": "${webRoot}/src/*"
+            },
+            "sourceMaps": true
+        }
+    ]
+}
+

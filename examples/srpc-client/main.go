@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/opensraph/srpc"
-	"github.com/opensraph/srpc/examples/data"
-	ecpb "github.com/opensraph/srpc/examples/proto/gen/srpc/echo/v1"
+	certs "github.com/opensraph/srpc/examples/_certs"
+	ecpb "github.com/opensraph/srpc/examples/_proto/go/srpc/echo/v1"
 	"golang.org/x/oauth2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -90,7 +90,7 @@ func streamInterceptor(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.Clie
 	return newWrappedStream(s), nil
 }
 
-func callUnaryEcho(client ecpb.EchoClient, message string) {
+func callUnaryEcho(client ecpb.EchoServiceClient, message string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	resp, err := client.UnaryEcho(ctx, &ecpb.EchoRequest{Message: message})
@@ -100,7 +100,7 @@ func callUnaryEcho(client ecpb.EchoClient, message string) {
 	fmt.Println("UnaryEcho: ", resp.Message)
 }
 
-func callBidiStreamingEcho(client ecpb.EchoClient) {
+func callBidiStreamingEcho(client ecpb.EchoServiceClient) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	c, err := client.BidirectionalStreamingEcho(ctx)
@@ -137,7 +137,7 @@ func main() {
 	flag.Parse()
 
 	// Create tls based credential.
-	creds, err := credentials.NewClientTLSFromFile(data.Path("x509/localhost.pem"), "localhost")
+	creds, err := credentials.NewClientTLSFromFile(certs.Path("localhost+2.pem"), "localhost")
 	if err != nil {
 		log.Fatalf("failed to load credentials: %v", err)
 	}
@@ -156,7 +156,7 @@ func main() {
 	defer conn.Close()
 
 	// Make an echo client and send RPCs.
-	rgc := ecpb.NewEchoClient(conn)
+	rgc := ecpb.NewEchoServiceClient(conn)
 	callUnaryEcho(rgc, "hello world")
 	callBidiStreamingEcho(rgc)
 }

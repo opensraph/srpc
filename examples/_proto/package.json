@@ -1,0 +1,23 @@
+{
+  "name": "@vitedemo/proto",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "files": [
+    "es"
+  ],
+  "exports": {
+    "./srpc/echo/v1": "./es/srpc/echo/v1/echo_pb.ts"
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "build:watch": "tsc --build --watch",
+    "clean": "tsc --build --clean"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.3.0"
+  },
+  "devDependencies": {
+    "typescript": "~5.8.3"
+  }
+}
