@@ -14,8 +14,8 @@ import (
 	"golang.org/x/net/http2"
 
 	"connectrpc.com/connect"
-	pb "github.com/opensraph/srpc/examples/proto/gen/srpc/echo/v1"
-	echov1connect "github.com/opensraph/srpc/examples/proto/gen/srpc/echo/v1/echov1connect"
+	pb "github.com/opensraph/srpc/examples/_proto/go/srpc/echo/v1"
+	echov1connect "github.com/opensraph/srpc/examples/_proto/go/srpc/echo/v1/echov1connect"
 )
 
 var (
@@ -23,7 +23,7 @@ var (
 	authToken  = flag.String("auth_token", "some-secret-token", "Authorization token")
 )
 
-func unaryCall(client echov1connect.EchoClient, message string) {
+func unaryCall(client echov1connect.EchoServiceClient, message string) {
 	fmt.Println("--- Executing Unary Call ---")
 	req := connect.NewRequest(&pb.EchoRequest{Message: message})
 	req.Header().Set("Authorization", "Bearer "+*authToken)
@@ -36,7 +36,7 @@ func unaryCall(client echov1connect.EchoClient, message string) {
 	fmt.Printf("Unary response: %s\n", resp.Msg.Message)
 }
 
-func bidiStreamingCall(client echov1connect.EchoClient, messages []string) {
+func bidiStreamingCall(client echov1connect.EchoServiceClient, messages []string) {
 	fmt.Println("--- Executing Bidirectional Streaming Call ---")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -89,7 +89,7 @@ func main() {
 	}
 
 	// Create ConnectRPC client
-	client := echov1connect.NewEchoClient(httpClient, *serverAddr)
+	client := echov1connect.NewEchoServiceClient(httpClient, *serverAddr)
 
 	// Execute unary call
 	unaryCall(client, "Hello, ConnectRPC!")

@@ -1,4 +1,4 @@
-package data
+package certs
 
 import (
 	"path/filepath"
