@@ -65,11 +65,12 @@ func NewServer(opt ...ServerOption) *server {
 
 	mux := http.NewServeMux()
 
-	handler := h2c.NewHandler(mux, http2Server)
-
+	var handler http.Handler
+	handler = mux
 	if opts.globalHandler != nil {
 		handler = opts.globalHandler(handler)
 	}
+	handler = h2c.NewHandler(handler, http2Server)
 
 	http1Server := &http.Server{
 		Handler:      handler,
